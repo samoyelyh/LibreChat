@@ -8,6 +8,7 @@ const models = require('@librechat/data-schemas').createModels(mongoose);
 const { PrincipalType, SystemRoles } = require('librechat-data-provider');
 
 const verifyOnly = process.argv.includes('--verify');
+const phase3SellerSpriteEnabled = process.env.PHASE3_SELLERSPRITE_ENABLED === 'true';
 
 const deniedCapabilities = {
   AGENTS: { USE: false, CREATE: false, SHARE: false, SHARE_PUBLIC: false },
@@ -29,7 +30,7 @@ const deniedCapabilities = {
   SHARED_LINKS: { CREATE: false, SHARE: false, SHARE_PUBLIC: false },
 };
 
-const permissions = ({ promptCreate, multiConvo, temporaryChat, peoplePicker }) => ({
+const permissions = ({ promptCreate, multiConvo, temporaryChat, peoplePicker, mcpUse = false }) => ({
   ...deniedCapabilities,
   BOOKMARKS: { USE: true },
   PROMPTS: {
@@ -45,6 +46,13 @@ const permissions = ({ promptCreate, multiConvo, temporaryChat, peoplePicker }) 
     VIEW_GROUPS: peoplePicker,
     VIEW_ROLES: peoplePicker,
   },
+  MCP_SERVERS: {
+    USE: mcpUse,
+    CREATE: false,
+    SHARE: false,
+    SHARE_PUBLIC: false,
+    CONFIGURE_OBO: false,
+  },
 });
 
 const roles = [
@@ -56,6 +64,7 @@ const roles = [
       multiConvo: true,
       temporaryChat: true,
       peoplePicker: true,
+      mcpUse: phase3SellerSpriteEnabled,
     }),
   },
   {
@@ -66,6 +75,7 @@ const roles = [
       multiConvo: true,
       temporaryChat: true,
       peoplePicker: false,
+      mcpUse: false,
     }),
   },
   {
@@ -76,6 +86,7 @@ const roles = [
       multiConvo: true,
       temporaryChat: true,
       peoplePicker: false,
+      mcpUse: phase3SellerSpriteEnabled,
     }),
   },
   {
@@ -86,6 +97,7 @@ const roles = [
       multiConvo: true,
       temporaryChat: true,
       peoplePicker: false,
+      mcpUse: phase3SellerSpriteEnabled,
     }),
   },
   {
@@ -96,6 +108,7 @@ const roles = [
       multiConvo: false,
       temporaryChat: false,
       peoplePicker: false,
+      mcpUse: false,
     }),
   },
   {
@@ -106,6 +119,7 @@ const roles = [
       multiConvo: false,
       temporaryChat: false,
       peoplePicker: false,
+      mcpUse: false,
     }),
   },
 ];
@@ -210,9 +224,15 @@ async function verify() {
     throw new Error(`Expected ${adminCapabilities.length} admin grants, found ${grants.length}.`);
   }
 
+  const expectedMcpRoles = new Set(
+    phase3SellerSpriteEnabled ? ['admin', 'operation', 'advertising'] : [],
+  );
   for (const role of foundRoles) {
-    if (role.permissions?.AGENTS?.USE || role.permissions?.MCP_SERVERS?.USE) {
-      throw new Error(`High-cost permission unexpectedly enabled for role ${role.name}.`);
+    if (role.permissions?.AGENTS?.USE) {
+      throw new Error(`Agent permission unexpectedly enabled for role ${role.name}.`);
+    }
+    if (Boolean(role.permissions?.MCP_SERVERS?.USE) !== expectedMcpRoles.has(role.name)) {
+      throw new Error(`SellerSprite MCP permission mismatch for role ${role.name}.`);
     }
   }
 

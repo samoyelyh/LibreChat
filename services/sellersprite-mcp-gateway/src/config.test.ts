@@ -1,0 +1,32 @@
+import { describe, expect, it } from 'vitest';
+import { loadConfig } from './config.js';
+
+const base = {
+  SELLERSPRITE_MCP_INTERNAL_KEY: 'i'.repeat(32),
+  SELLERSPRITE_MCP_URL: 'https://mcp.sellersprite.com/mcp',
+  SELLERSPRITE_MCP_SECRET_KEY: 'secret-value',
+  SELLERSPRITE_MCP_MONGO_URI: 'mongodb://example',
+};
+
+describe('gateway configuration', () => {
+  it('accepts a server-side secret header configuration', () => {
+    const config = loadConfig(base);
+    expect(config.upstreamUrl).toBe('https://mcp.sellersprite.com/mcp');
+    expect(config.upstreamSecret).toBe('secret-value');
+  });
+
+  it('rejects URL-based secrets', () => {
+    expect(() =>
+      loadConfig({
+        ...base,
+        SELLERSPRITE_MCP_URL: 'https://mcp.sellersprite.com/mcp?secret-key=leak',
+      }),
+    ).toThrow('must not contain secret-key');
+  });
+
+  it('rejects non-TLS upstream URLs', () => {
+    expect(() =>
+      loadConfig({ ...base, SELLERSPRITE_MCP_URL: 'http://mcp.sellersprite.com/mcp' }),
+    ).toThrow();
+  });
+});

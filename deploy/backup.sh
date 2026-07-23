@@ -36,6 +36,12 @@ compose exec -T mongodb sh -lc 'mongodump --quiet --authenticationDatabase admin
 docker cp "$mongo_container:/tmp/ai-adapter-mongodb.archive.gz" "$backup_dir/ai-adapter-mongodb.archive.gz"
 compose exec -T mongodb rm -f /tmp/ai-adapter-mongodb.archive.gz
 
+# SellerSprite call audits and safe credential metadata contain no plaintext
+# secret; the actual secret remains only in the protected deploy.env copy.
+compose exec -T mongodb sh -lc 'mongodump --quiet --authenticationDatabase admin --username "$MONGO_INITDB_ROOT_USERNAME" --password "$MONGO_INITDB_ROOT_PASSWORD" --db "${SELLERSPRITE_MCP_DB:-sellersprite_mcp_gateway}" --archive=/tmp/sellersprite-mongodb.archive.gz --gzip'
+docker cp "$mongo_container:/tmp/sellersprite-mongodb.archive.gz" "$backup_dir/sellersprite-mongodb.archive.gz"
+compose exec -T mongodb rm -f /tmp/sellersprite-mongodb.archive.gz
+
 find "$backup_dir" -maxdepth 1 -type f ! -name SHA256SUMS -print0 \
   | sort -z \
   | xargs -0 sha256sum > "$backup_dir/SHA256SUMS"

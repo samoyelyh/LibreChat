@@ -12,11 +12,11 @@ const requiredDisabled = [
   ['runCode'],
   ['webSearch'],
   ['agents', 'use'],
-  ['mcpServers', 'use'],
   ['remoteAgents', 'use'],
   ['skills'],
   ['sharedLinks'],
 ];
+const phase3SellerSpriteEnabled = process.env.PHASE3_SELLERSPRITE_ENABLED === 'true';
 
 const readPath = (value, keys) => keys.reduce((current, key) => current?.[key], value);
 
@@ -60,9 +60,12 @@ const readPath = (value, keys) => keys.reduce((current, key) => current?.[key], 
         throw new Error(`Runtime feature gate interface.${keys.join('.')} is not false.`);
       }
     }
-
+    const mcpUse = readPath(config.interface, ['mcpServers', 'use']);
+    if (!phase3SellerSpriteEnabled && mcpUse !== false) {
+      throw new Error('Phase 1 requires interface.mcpServers.use=false.');
+    }
     console.log(
-      'PHASE1_ADMIN_API_OK users=200 roles=200 groups=200 config=200 features=disabled',
+      `PHASE1_ADMIN_API_OK users=200 roles=200 groups=200 config=200 phase3_role_scoped=${phase3SellerSpriteEnabled}`,
     );
     process.exit(0);
   } catch (error) {

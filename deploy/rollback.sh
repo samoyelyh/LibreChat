@@ -38,6 +38,11 @@ if [[ "$restore_db" == '--restore-db' ]]; then
     compose exec -T mongodb sh -lc 'mongorestore --quiet --drop --authenticationDatabase admin --username "$MONGO_INITDB_ROOT_USERNAME" --password "$MONGO_INITDB_ROOT_PASSWORD" --archive=/tmp/ai-adapter-mongodb.archive.gz --gzip'
     compose exec -T mongodb rm -f /tmp/ai-adapter-mongodb.archive.gz
   fi
+  if [[ -f "$backup_dir/sellersprite-mongodb.archive.gz" ]]; then
+    docker cp "$backup_dir/sellersprite-mongodb.archive.gz" "$mongo_container:/tmp/sellersprite-mongodb.archive.gz"
+    compose exec -T mongodb sh -lc 'mongorestore --quiet --drop --authenticationDatabase admin --username "$MONGO_INITDB_ROOT_USERNAME" --password "$MONGO_INITDB_ROOT_PASSWORD" --archive=/tmp/sellersprite-mongodb.archive.gz --gzip'
+    compose exec -T mongodb rm -f /tmp/sellersprite-mongodb.archive.gz
+  fi
 fi
 
 printf 'Rollback applied. Named volumes were not deleted.\n'

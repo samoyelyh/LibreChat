@@ -28,12 +28,6 @@ interface:
     roles: false
   marketplace:
     use: false
-  mcpServers:
-    use: false
-    create: false
-    share: false
-    public: false
-    configureObo: false
   remoteAgents:
     use: false
     create: false
@@ -48,6 +42,31 @@ memory:
 
 registration:
   socialLogins: []
+
+mcpSettings:
+  allowedAddresses:
+    - 'sellersprite-mcp-gateway:4200'
+
+mcpServers:
+  sellersprite-mcp:
+    title: 'SellerSprite'
+    description: 'Amazon ASIN、关键词、竞品、市场、趋势和评论数据'
+    type: streamable-http
+    url: 'http://sellersprite-mcp-gateway:4200/mcp'
+    headers:
+      X-MCP-Gateway-Key: '${SELLERSPRITE_MCP_INTERNAL_KEY}'
+      X-LibreChat-User-ID: '{{LIBRECHAT_USER_ID}}'
+      X-LibreChat-User-Email: '{{LIBRECHAT_USER_EMAIL}}'
+      X-LibreChat-User-Role: '{{LIBRECHAT_USER_ROLE}}'
+      X-LibreChat-Conversation-ID: '{{LIBRECHAT_BODY_CONVERSATIONID}}'
+      X-LibreChat-Message-ID: '{{LIBRECHAT_BODY_MESSAGEID}}'
+    requiresOAuth: false
+    timeout: 120000
+    initTimeout: 30000
+    serverInstructions: |
+      卖家精灵提供 Amazon 第三方市场研究和估算数据。
+      回答时必须区分外部第三方数据、外部估算数据与公司内部实际经营数据；
+      不得把估算销量描述为真实订单销量。
 
 endpoints:
   custom:
