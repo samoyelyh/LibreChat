@@ -76,3 +76,25 @@ Phase 1 仅用于可信局域网 HTTP，`SESSION_COOKIE_SECURE=false`。取得�
 ## SSH 项目密钥
 
 经用户明确授权，后续阶段保留一把仅用于 `woda@192.168.0.27` 的项目专用 ED25519 密钥。私钥只保存在本机用户 `.ssh` 目录，不得复制到仓库、服务器部署目录、备份或日志。撤销时从服务器 `~/.ssh/authorized_keys` 删除注释为 `woda-cross-border-ai-codex` 的公钥，并删除本机对应私钥；轮换时先验证新密钥，再撤销旧密钥。
+
+## Phase 3 卖家精灵 MCP
+
+首次配置或轮换公司统一密钥：
+
+```bash
+./deploy/configure-sellersprite-secret.sh
+```
+
+该脚本提供带标签的两次隐藏输入，不接受空值或两次不一致的值。保存后只能覆盖，不能从管理命令读回明文。
+
+日常只读管理：
+
+```bash
+./deploy/sellersprite-admin.sh status
+./deploy/sellersprite-admin.sh test
+./deploy/sellersprite-admin.sh audits 50
+./deploy/seed-phase3-rbac.sh verify
+./deploy/verify-phase3.sh
+```
+
+`status` 只显示是否配置、SHA-256 指纹后四位、更新人/时间、最近连接测试、最后调用、本月次数和套餐使用比例。`test` 只执行 MCP 初始化和工具列表，不发起业务数据查询。

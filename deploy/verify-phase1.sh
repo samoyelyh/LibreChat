@@ -88,12 +88,27 @@ else
   fail 'Brand or authentication startup config mismatch'
 fi
 
+mcp_interface_block=$(sed -n '/^  mcpServers:$/,/^  remoteAgents:$/p' "$ROOT_DIR/config/librechat.yaml")
+if grep -q '^PHASE3_SELLERSPRITE_ENABLED=true$' "$ENV_FILE"; then
+  if [[ -z "$mcp_interface_block" ]]; then
+    mcp_use_gate_ok=true
+  else
+    mcp_use_gate_ok=false
+  fi
+else
+  if grep -Eq '^    use: false$' <<<"$mcp_interface_block"; then
+    mcp_use_gate_ok=true
+  else
+    mcp_use_gate_ok=false
+  fi
+fi
+
 if grep -Eq '^  memories: false$' "$ROOT_DIR/config/librechat.yaml" \
   && grep -Eq '^  runCode: false$' "$ROOT_DIR/config/librechat.yaml" \
   && grep -Eq '^  webSearch: false$' "$ROOT_DIR/config/librechat.yaml" \
   && grep -Eq '^  skills: false$' "$ROOT_DIR/config/librechat.yaml" \
   && grep -Eq '^  sharedLinks: false$' "$ROOT_DIR/config/librechat.yaml" \
-  && grep -A6 -E '^  mcpServers:$' "$ROOT_DIR/config/librechat.yaml" | grep -Eq '^    use: false$' \
+  && [[ "$mcp_use_gate_ok" == true ]] \
   && grep -A5 -E '^  remoteAgents:$' "$ROOT_DIR/config/librechat.yaml" | grep -Eq '^    use: false$' \
   && grep -Eq '^memory:$' "$ROOT_DIR/config/librechat.yaml" \
   && grep -Eq '^  disabled: true$' "$ROOT_DIR/config/librechat.yaml"; then
@@ -166,7 +181,8 @@ secret_names=(
   MONGO_ROOT_PASSWORD MEILI_MASTER_KEY POSTGRES_PASSWORD ADMIN_PANEL_SESSION_SECRET
   JWT_SECRET JWT_REFRESH_SECRET CREDS_KEY CREDS_IV SELLERSPRITE_MCP_SECRET_KEY
   AI_GATEWAY_ADMIN_TOKEN AI_TOKEN_ENCRYPTION_KEY AI_ADAPTER_INTERNAL_KEY
-  REDIS_PASSWORD AI_ADAPTER_DB_PASSWORD
+  REDIS_PASSWORD AI_ADAPTER_DB_PASSWORD SELLERSPRITE_MCP_INTERNAL_KEY
+  SELLERSPRITE_MCP_DB_PASSWORD
 )
 logs_file=$(mktemp)
 trap 'rm -f "$logs_file"' EXIT

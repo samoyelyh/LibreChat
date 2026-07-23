@@ -52,7 +52,8 @@ source "$ENV_FILE"
 logs_file=$(mktemp)
 trap 'rm -f "$logs_file"' EXIT
 compose logs --no-color > "$logs_file"
-for name in REDIS_PASSWORD AI_ADAPTER_DB_PASSWORD AI_TOKEN_ENCRYPTION_KEY AI_ADAPTER_INTERNAL_KEY; do
+for name in REDIS_PASSWORD AI_ADAPTER_DB_PASSWORD AI_TOKEN_ENCRYPTION_KEY AI_ADAPTER_INTERNAL_KEY \
+  SELLERSPRITE_MCP_SECRET_KEY SELLERSPRITE_MCP_INTERNAL_KEY SELLERSPRITE_MCP_DB_PASSWORD; do
   value=${!name:-}
   [[ -z "$value" ]] && continue
   git -C "$ROOT_DIR" grep -Fq -- "$value" -- . 2>/dev/null && fail "$name appears in a tracked file"

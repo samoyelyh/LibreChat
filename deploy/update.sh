@@ -13,7 +13,7 @@ fi
 
 declare -A allowed=(
   [nginx]=1 [api]=1 [admin-panel]=1 [mongodb]=1 [meilisearch]=1 [vectordb]=1 [rag-api]=1
-  [redis]=1 [ai-quota-adapter]=1
+  [redis]=1 [ai-quota-adapter]=1 [sellersprite-mcp-gateway]=1
 )
 mkdir -p "$DEPLOY_DIR/runtime"
 tmp=$(mktemp "$DEPLOY_DIR/runtime/images.override.XXXXXX")
@@ -30,6 +30,7 @@ for mapping in "$@"; do
   immutable=false
   [[ "$image" =~ @sha256:[0-9a-f]{64}$ ]] && immutable=true
   [[ "$service" == ai-quota-adapter && "$image" =~ ^sha256:[0-9a-f]{64}$ ]] && immutable=true
+  [[ "$service" == sellersprite-mcp-gateway && "$image" =~ ^sha256:[0-9a-f]{64}$ ]] && immutable=true
   if [[ "$immutable" != true ]]; then
     printf 'Invalid immutable image mapping: %s\n' "$mapping" >&2
     exit 2

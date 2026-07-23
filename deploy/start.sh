@@ -32,11 +32,13 @@ done
   exit 1
 }
 "$DEPLOY_DIR/init-ai-adapter-mongo.sh"
+"$DEPLOY_DIR/init-sellersprite-mongo.sh"
 compose up -d --remove-orphans
 
 for _ in $(seq 1 60); do
   if curl -fsS "http://127.0.0.1:${USER_PORT}/readyz" >/dev/null && curl -fsS http://127.0.0.1:3000/health >/dev/null; then
-    printf 'Phase 2 endpoints are ready.\n'
+    "$DEPLOY_DIR/seed-phase3-rbac.sh" seed >/dev/null
+    printf 'Phase 3 endpoints are ready.\n'
     exit 0
   fi
   sleep 5

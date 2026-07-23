@@ -84,3 +84,21 @@
 - 根据用户 2026-07-23 的明确授权，SSH 从“每阶段临时密钥”调整为本机长期项目专用 ED25519 密钥；密钥不进入 Git。失败的临时公钥已从服务器删除，临时私钥已从本机删除。
 
 Phase 2 没有实现 Phase 5 的自动 New API 用户开通、部门预算、额度调整后台和完整“我的额度”页面。当前余额与使用记录通过受 JWT 保护的 `/api/ai-quota/balance`、`/api/ai-quota/usage` 提供真实数据。
+
+## Phase 3 实施记录（2026-07-23）
+
+- 分支：`woda/phase-3`；范围只包含卖家精灵公司统一 MCP。
+- 新增独立 `sellersprite-mcp-gateway`，负责服务端密钥注入、用户/角色/部门双重校验、工具列表过滤、调用审计和管理员连接测试。
+- LibreChat 只连接 Docker 内网 `http://sellersprite-mcp-gateway:4200/mcp`；真实卖家精灵地址与 `secret-key` 仅由网关使用，网关不发布 Host 端口。
+- 普通用户没有 `customUserVars`、密钥输入框或 MCP Server 创建权限。
+- 权限组：`sellersprite_asin`、`sellersprite_keyword`、`sellersprite_market`、`sellersprite_review`；未知工具对非管理员默认拒绝。
+- 网关数据库账号对 `LibreChat` 只有读权限，对独立审计库只有读写权限。
+- 本地自动测试：3 个文件、12 项测试通过；TypeScript 类型检查和构建通过。
+- 真实密钥已由用户隐藏输入并保存到权限为 `0600` 的服务器 `deploy/.env`；Git、公共配置和全部容器日志的明文匹配扫描通过。
+- 最终本地镜像 ID：`sha256:20c2589439dbd8b14b826d5997d9a6d30f794f7d9fb5bd4734ef9b21e20ca3d7`。网关仅在 Docker 内网监听 `4200`，没有 Host Publish。
+- SellerSprite Streamable HTTP 连接测试成功，实际发现 44 个工具；执行一次最低副作用真实工具调用 `trademark_country_list` 成功，月度审计计数准确从 0 增至 1。
+- Phase 3 授权验证确认管理员允许、普通用户拒绝；8 个系统/业务角色和 6 个部门重复预置不产生重复数据。
+- 整个 `interface.mcpServers` 按 v0.8.7 权限迁移语义从 YAML 省略，数据库角色权限成为唯一 `MCP_SERVERS` 来源；API 单独重启后以只验证模式确认权限未被重置。
+- 重建 API 和 SellerSprite 网关后，连接状态、凭证安全元数据与月度审计计数保持不变；Nginx 使用 Docker DNS 动态解析，入口仍返回 HTTP 200。
+- `verify-phase3.sh`、`verify-phase2.sh`、`verify-phase1.sh` 分别返回 `PHASE3_VERIFY_OK`、`PHASE2_VERIFY_OK`、`PHASE1_VERIFY_OK`。
+- 最终备份：`/opt/cross-border-ai/deploy/backups/20260723T082701Z`，包含 LibreChat、AI Adapter 与 SellerSprite 审计数据库归档、Compose/config、镜像记录和受保护环境文件。

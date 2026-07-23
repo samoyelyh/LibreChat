@@ -21,6 +21,8 @@ services:
         condition: service_healthy
       ai-quota-adapter:
         condition: service_healthy
+      sellersprite-mcp-gateway:
+        condition: service_healthy
     ports:
       - '${USER_PORT:-7999}:80'
       - '3000:3000'
@@ -52,6 +54,8 @@ services:
         condition: service_healthy
       ai-quota-adapter:
         condition: service_healthy
+      sellersprite-mcp-gateway:
+        condition: service_healthy
     env_file:
       - .env
     environment:
@@ -61,14 +65,17 @@ services:
       MONGO_URI: mongodb://${MONGO_ROOT_USERNAME}:${MONGO_ROOT_PASSWORD}@mongodb:27017/LibreChat?authSource=admin
       MEILI_HOST: http://meilisearch:7700
       RAG_API_URL: http://rag-api:${RAG_PORT:-8000}
-      NO_PROXY: localhost,127.0.0.1,::1,mongodb,meilisearch,vectordb,rag-api,redis,ai-quota-adapter,admin-panel,nginx
-      no_proxy: localhost,127.0.0.1,::1,mongodb,meilisearch,vectordb,rag-api,redis,ai-quota-adapter,admin-panel,nginx
+      NO_PROXY: localhost,127.0.0.1,::1,mongodb,meilisearch,vectordb,rag-api,redis,ai-quota-adapter,sellersprite-mcp-gateway,admin-panel,nginx
+      no_proxy: localhost,127.0.0.1,::1,mongodb,meilisearch,vectordb,rag-api,redis,ai-quota-adapter,sellersprite-mcp-gateway,admin-panel,nginx
     volumes:
       - ../config/librechat.yaml:/app/librechat.yaml:ro
       - ./seed-phase1-rbac.js:/app/deploy/seed-phase1-rbac.js:ro
       - ./verify-user-isolation.js:/app/deploy/verify-user-isolation.js:ro
       - ./verify-admin-api.js:/app/deploy/verify-admin-api.js:ro
       - ./list-phase2-user.js:/app/deploy/list-phase2-user.js:ro
+      - ./seed-phase3-rbac.js:/app/deploy/seed-phase3-rbac.js:ro
+      - ./verify-phase3-actors.js:/app/deploy/verify-phase3-actors.js:ro
+      - ./verify-phase3-live.js:/app/deploy/verify-phase3-live.js:ro
       - uploads:/app/uploads
       - api_logs:/app/api/logs
     networks:
@@ -123,6 +130,7 @@ services:
     volumes:
       - mongodb_data:/data/db
       - ./init-ai-adapter-mongo.js:/opt/woda/init-ai-adapter-mongo.js:ro
+      - ./init-sellersprite-mongo.js:/opt/woda/init-sellersprite-mongo.js:ro
     networks:
       - backend
     healthcheck:
@@ -195,6 +203,45 @@ services:
       test:
         - CMD-SHELL
         - node -e "fetch('http://127.0.0.1:${AI_ADAPTER_PORT:-4100}/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    logging: *default-logging
+    <<: *default-security
+
+  sellersprite-mcp-gateway:
+    image: ${SELLERSPRITE_MCP_GATEWAY_IMAGE:?Run deploy/build-sellersprite-gateway.sh first}
+    restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      SELLERSPRITE_MCP_GATEWAY_HOST: 0.0.0.0
+      SELLERSPRITE_MCP_GATEWAY_PORT: ${SELLERSPRITE_MCP_GATEWAY_PORT:-4200}
+      SELLERSPRITE_MCP_INTERNAL_KEY: ${SELLERSPRITE_MCP_INTERNAL_KEY}
+      SELLERSPRITE_MCP_URL: ${SELLERSPRITE_MCP_URL:-https://mcp.sellersprite.com/mcp}
+      SELLERSPRITE_MCP_SECRET_KEY: ${SELLERSPRITE_MCP_SECRET_KEY}
+      SELLERSPRITE_MCP_MONGO_URI: mongodb://${SELLERSPRITE_MCP_DB_USERNAME}:${SELLERSPRITE_MCP_DB_PASSWORD}@mongodb:27017/${SELLERSPRITE_MCP_DB:-sellersprite_mcp_gateway}?authSource=${SELLERSPRITE_MCP_DB:-sellersprite_mcp_gateway}
+      SELLERSPRITE_MCP_LIBRECHAT_DB: LibreChat
+      SELLERSPRITE_MCP_DB: ${SELLERSPRITE_MCP_DB:-sellersprite_mcp_gateway}
+      SELLERSPRITE_MCP_TIMEOUT_MS: ${SELLERSPRITE_MCP_TIMEOUT_MS:-120000}
+      SELLERSPRITE_MCP_AUDIT_RETENTION_DAYS: ${SELLERSPRITE_MCP_AUDIT_RETENTION_DAYS:-365}
+      SELLERSPRITE_MCP_MONTHLY_LIMIT: ${SELLERSPRITE_MCP_MONTHLY_LIMIT:-0}
+      NO_PROXY: localhost,127.0.0.1,::1,mongodb
+      no_proxy: localhost,127.0.0.1,::1,mongodb
+    networks:
+      - edge
+      - backend
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - node -e "fetch('http://127.0.0.1:${SELLERSPRITE_MCP_GATEWAY_PORT:-4200}/readyz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
       interval: 10s
       timeout: 5s
       retries: 20
