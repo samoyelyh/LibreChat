@@ -16,8 +16,8 @@ fail() {
   failures=$((failures + 1))
 }
 
-if [[ "$(git -C "$ROOT_DIR" rev-parse HEAD)" == 9e74cc0e57b395926122bd4062c1fcedc48ed465 ]]; then
-  pass 'LibreChat commit is fixed to v0.8.7'
+if git -C "$ROOT_DIR" merge-base --is-ancestor 9e74cc0e57b395926122bd4062c1fcedc48ed465 HEAD; then
+  pass 'LibreChat v0.8.7 base commit is retained'
 else
   fail 'LibreChat commit mismatch'
 fi
@@ -34,7 +34,7 @@ else
   fail 'Compose configuration is invalid'
 fi
 
-invalid_images=$(compose config --images | grep -Ev '@sha256:[0-9a-f]{64}$' || true)
+invalid_images=$(compose config --images | grep -Ev '(@sha256:[0-9a-f]{64}|^sha256:[0-9a-f]{64})$' || true)
 if [[ -z "$invalid_images" ]]; then
   pass 'All production images use immutable digests'
 else
@@ -166,6 +166,7 @@ secret_names=(
   MONGO_ROOT_PASSWORD MEILI_MASTER_KEY POSTGRES_PASSWORD ADMIN_PANEL_SESSION_SECRET
   JWT_SECRET JWT_REFRESH_SECRET CREDS_KEY CREDS_IV SELLERSPRITE_MCP_SECRET_KEY
   AI_GATEWAY_ADMIN_TOKEN AI_TOKEN_ENCRYPTION_KEY AI_ADAPTER_INTERNAL_KEY
+  REDIS_PASSWORD AI_ADAPTER_DB_PASSWORD
 )
 logs_file=$(mktemp)
 trap 'rm -f "$logs_file"' EXIT

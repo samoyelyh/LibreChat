@@ -60,3 +60,19 @@ docker compose --env-file deploy/.env -f deploy/docker-compose.production.yml ex
 ## HTTPS
 
 Phase 1 仅用于可信局域网 HTTP，`SESSION_COOKIE_SECURE=false`。取得内部域名与证书后，应新增 443、强制 HTTPS、启用 Secure Cookie 与 HSTS，再关闭明文入口。
+
+## Phase 2 常用操作
+
+首次升级：
+
+```bash
+./deploy/upgrade-phase2-env.sh
+./deploy/build-ai-adapter.sh
+./deploy/start.sh
+```
+
+映射一个现有非管理员测试用户时运行 `./deploy/upsert-ai-mapping.sh`。脚本会显示已选择的 Email 和模型，并提供不回显的 Token 输入框；Token 不作为命令参数。只读验收运行 `./deploy/verify-phase2.sh`。
+
+## SSH 项目密钥
+
+经用户明确授权，后续阶段保留一把仅用于 `woda@192.168.0.27` 的项目专用 ED25519 密钥。私钥只保存在本机用户 `.ssh` 目录，不得复制到仓库、服务器部署目录、备份或日志。撤销时从服务器 `~/.ssh/authorized_keys` 删除注释为 `woda-cross-border-ai-codex` 的公钥，并删除本机对应私钥；轮换时先验证新密钥，再撤销旧密钥。
