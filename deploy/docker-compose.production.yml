@@ -19,6 +19,8 @@ services:
         condition: service_healthy
       admin-panel:
         condition: service_healthy
+      ai-quota-adapter:
+        condition: service_healthy
     ports:
       - '${USER_PORT:-7999}:80'
       - '3000:3000'
@@ -48,6 +50,8 @@ services:
         condition: service_healthy
       rag-api:
         condition: service_healthy
+      ai-quota-adapter:
+        condition: service_healthy
     env_file:
       - .env
     environment:
@@ -57,13 +61,14 @@ services:
       MONGO_URI: mongodb://${MONGO_ROOT_USERNAME}:${MONGO_ROOT_PASSWORD}@mongodb:27017/LibreChat?authSource=admin
       MEILI_HOST: http://meilisearch:7700
       RAG_API_URL: http://rag-api:${RAG_PORT:-8000}
-      NO_PROXY: localhost,127.0.0.1,::1,mongodb,meilisearch,vectordb,rag-api,admin-panel,nginx
-      no_proxy: localhost,127.0.0.1,::1,mongodb,meilisearch,vectordb,rag-api,admin-panel,nginx
+      NO_PROXY: localhost,127.0.0.1,::1,mongodb,meilisearch,vectordb,rag-api,redis,ai-quota-adapter,admin-panel,nginx
+      no_proxy: localhost,127.0.0.1,::1,mongodb,meilisearch,vectordb,rag-api,redis,ai-quota-adapter,admin-panel,nginx
     volumes:
       - ../config/librechat.yaml:/app/librechat.yaml:ro
       - ./seed-phase1-rbac.js:/app/deploy/seed-phase1-rbac.js:ro
       - ./verify-user-isolation.js:/app/deploy/verify-user-isolation.js:ro
       - ./verify-admin-api.js:/app/deploy/verify-admin-api.js:ro
+      - ./list-phase2-user.js:/app/deploy/list-phase2-user.js:ro
       - uploads:/app/uploads
       - api_logs:/app/api/logs
     networks:
@@ -117,6 +122,7 @@ services:
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
     volumes:
       - mongodb_data:/data/db
+      - ./init-ai-adapter-mongo.js:/opt/woda/init-ai-adapter-mongo.js:ro
     networks:
       - backend
     healthcheck:
@@ -127,6 +133,72 @@ services:
       timeout: 8s
       retries: 20
       start_period: 30s
+    logging: *default-logging
+    <<: *default-security
+
+  redis:
+    image: redis@sha256:6ab0b6e7381779332f97b8ca76193e45b0756f38d4c0dcda72dbb3c32061ab99
+    restart: unless-stopped
+    entrypoint: [/usr/local/bin/woda-redis-entrypoint.sh]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    volumes:
+      - ./redis-entrypoint.sh:/usr/local/bin/woda-redis-entrypoint.sh:ro
+      - redis_data:/data
+    tmpfs:
+      - /tmp
+    networks:
+      - backend
+    healthcheck:
+      test: [CMD-SHELL, 'REDISCLI_AUTH="$$REDIS_PASSWORD" redis-cli --no-auth-warning ping | grep -q PONG']
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+    logging: *default-logging
+    <<: *default-security
+
+  ai-quota-adapter:
+    image: ${AI_ADAPTER_IMAGE:?Run deploy/build-ai-adapter.sh first}
+    restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      AI_ADAPTER_HOST: 0.0.0.0
+      AI_ADAPTER_PORT: ${AI_ADAPTER_PORT:-4100}
+      AI_ADAPTER_INTERNAL_KEY: ${AI_ADAPTER_INTERNAL_KEY}
+      AI_TOKEN_ENCRYPTION_KEY: ${AI_TOKEN_ENCRYPTION_KEY}
+      JWT_SECRET: ${JWT_SECRET}
+      MONGO_URI: mongodb://${AI_ADAPTER_DB_USERNAME}:${AI_ADAPTER_DB_PASSWORD}@mongodb:27017/${AI_ADAPTER_DB_NAME:-ai_quota_adapter}?authSource=${AI_ADAPTER_DB_NAME:-ai_quota_adapter}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      NEW_API_BASE_URL: ${NEW_API_BASE_URL:-https://api.aso8ty.com/v1}
+      NEW_API_REQUEST_TIMEOUT_MS: ${NEW_API_REQUEST_TIMEOUT_MS:-120000}
+      AI_ADAPTER_REQUESTS_PER_MINUTE: ${AI_ADAPTER_REQUESTS_PER_MINUTE:-30}
+      AI_ADAPTER_MAX_CONCURRENT_REQUESTS: ${AI_ADAPTER_MAX_CONCURRENT_REQUESTS:-2}
+      AI_ADAPTER_AUDIT_RETENTION_DAYS: ${AI_ADAPTER_AUDIT_RETENTION_DAYS:-90}
+      AI_ADAPTER_TEST_MODEL: ${AI_ADAPTER_TEST_MODEL:-kimi-k2}
+      RUN_BILLABLE_PHASE2_TESTS: ${RUN_BILLABLE_PHASE2_TESTS:-false}
+      NO_PROXY: localhost,127.0.0.1,::1,mongodb,redis
+      no_proxy: localhost,127.0.0.1,::1,mongodb,redis
+    networks:
+      - edge
+      - backend
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - node -e "fetch('http://127.0.0.1:${AI_ADAPTER_PORT:-4100}/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
     logging: *default-logging
     <<: *default-security
 
@@ -218,3 +290,4 @@ volumes:
   postgres_data:
   uploads:
   api_logs:
+  redis_data:

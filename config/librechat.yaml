@@ -4,7 +4,7 @@ cache: true
 interface:
   customWelcome: '欢迎使用沃达跨境电商AI平台'
   fileSearch: false
-  modelSelect: false
+  modelSelect: true
   parameters: false
   presets: false
   prompts:
@@ -48,3 +48,22 @@ memory:
 
 registration:
   socialLogins: []
+
+endpoints:
+  custom:
+    - name: 'woda-ai'
+      apiKey: '${AI_ADAPTER_INTERNAL_KEY}'
+      baseURL: 'http://ai-quota-adapter:4100/v1'
+      headers:
+        X-Adapter-Internal-Key: '${AI_ADAPTER_INTERNAL_KEY}'
+        X-LibreChat-User-ID: '{{LIBRECHAT_USER_ID}}'
+        X-LibreChat-User-Email: '{{LIBRECHAT_USER_EMAIL}}'
+        X-LibreChat-Conversation-ID: '{{LIBRECHAT_BODY_CONVERSATIONID}}'
+        X-LibreChat-Message-ID: '{{LIBRECHAT_BODY_MESSAGEID}}'
+      models:
+        default:
+          - 'kimi-k2'
+        fetch: true
+      titleConvo: false
+      summarize: false
+      modelDisplayLabel: '沃达 AI'

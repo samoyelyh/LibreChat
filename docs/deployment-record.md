@@ -66,3 +66,21 @@
 - Admin Panel 仍为 Preview；`/api/admin/users` 在本版本主要提供查询，用户创建和禁用继续使用官方 CLI。
 - Phase 1 为可信局域网 HTTP，未启用 Secure Cookie/HSTS；取得内部域名和证书后必须升级 HTTPS。
 - New API 为 RC 版本，Phase 2 接入前必须重跑管理 API 结构与四类模型请求契约测试。
+
+## Phase 2 实际部署记录（2026-07-23）
+
+- 分支：`woda/phase-2`；LibreChat 上游基线仍为 `v0.8.7` / `9e74cc0e57b395926122bd4062c1fcedc48ed465`。
+- AI Quota Adapter 已部署为独立 Node.js/TypeScript 服务；最终不可变本地镜像 ID 为 `sha256:18623910fffadc300ffe44024c28551a33f19980fdc01d96e0f6e642d9e1db2e`。
+- Redis `7.4.9-alpine` 使用固定 digest，仅加入内部 Docker 网络；Adapter、Redis、MongoDB、Meilisearch、PostgreSQL 与 RAG API 均未发布 Host 端口。
+- 已为一个现有非管理员测试用户建立独立 New API Token 映射；Token 使用 AES-256-GCM 保存，明文未写入 Git、命令参数、日志或交付记录。
+- 授权模型为 `kimi-k2`。真实最低成本验收结果：模型列表 1 个、非流式 HTTP 200、SSE HTTP 200。
+- 使用 2 分钟临时 LibreChat JWT 请求原生 `/api/models`，返回 `woda-ai: ["kimi-k2"]`，证明用户上下文、Custom Endpoint 和 Adapter 模型过滤链路已贯通；JWT 未输出或保存。
+- 最近 30 分钟账单归属核验：Adapter 审计 2 条（流式 1、非流式 1），New API Token 日志 2 条（流式 1、非流式 1），两侧一致。New API 仍是唯一计费账本。
+- `verify-phase2.sh` 返回 `PHASE2_VERIFY_OK`；完整 `verify-phase1.sh` 回归返回 `PHASE1_VERIFY_OK`。
+- Redis 与 Adapter 重启后映射、模型列表和真实余额仍可读取，重启持久化验证通过。
+- 用户入口保持 `http://192.168.0.27:7999`，管理入口保持 `http://192.168.0.27:3000`。本项目没有发布 80；当前宿主机 80 与 6379 分别由既有 `batchforge-frontend`、`batchforge-redis` 占用，未对它们执行任何变更。
+- 部署前备份：`/opt/cross-border-ai/deploy/backups/20260723T040927Z`。
+- 最终备份：`/opt/cross-border-ai/deploy/backups/20260723T042755Z`，包含 LibreChat Mongo、Adapter Mongo、Compose/config、不可变镜像记录和权限为 `0600` 的受保护环境文件。
+- 根据用户 2026-07-23 的明确授权，SSH 从“每阶段临时密钥”调整为本机长期项目专用 ED25519 密钥；密钥不进入 Git。失败的临时公钥已从服务器删除，临时私钥已从本机删除。
+
+Phase 2 没有实现 Phase 5 的自动 New API 用户开通、部门预算、额度调整后台和完整“我的额度”页面。当前余额与使用记录通过受 JWT 保护的 `/api/ai-quota/balance`、`/api/ai-quota/usage` 提供真实数据。
