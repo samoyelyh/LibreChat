@@ -87,26 +87,32 @@ ARG NODE_MAX_OLD_SPACE_SIZE
 ENV NODE_OPTIONS="--max-old-space-size=${NODE_MAX_OLD_SPACE_SIZE}"
 RUN npm run build
 
+# Reuse the already-installed, lockfile-verified workspace dependencies and
+# prune them before copying into the clean runtime stage. This avoids a second
+# network-bound `npm ci --omit=dev` while keeping development packages out of
+# the final image layers.
+FROM base AS production-dependencies
+WORKDIR /app
+RUN npm prune \
+    --omit=dev \
+    --workspaces \
+    --include-workspace-root \
+    --ignore-scripts \
+    --no-audit \
+    --no-fund
+
 # API setup (including client dist)
 FROM base-min AS api-build
-ARG NPM_CI_TIMEOUT_SECONDS=1500
-ARG NPM_CI_ATTEMPTS=2
 # Add `uv` for extended MCP support
 COPY --from=ghcr.io/astral-sh/uv:0.6.13 /uv /uvx /bin/
 RUN uv --version
 WORKDIR /app
-# Install only production deps
-RUN attempt=1; \
-    until timeout "$NPM_CI_TIMEOUT_SECONDS" npm ci --omit=dev; do \
-      status=$?; \
-      if [ "$attempt" -ge "$NPM_CI_ATTEMPTS" ]; then \
-        exit "$status"; \
-      fi; \
-      echo "npm ci --omit=dev failed with exit code $status; retrying attempt $((attempt + 1))/$NPM_CI_ATTEMPTS"; \
-      attempt=$((attempt + 1)); \
-      npm cache clean --force || true; \
-      sleep 10; \
-    done
+# Install the pruned production dependency tree into a clean runtime layer.
+COPY --from=production-dependencies /app/node_modules ./node_modules
+COPY --from=production-dependencies /app/api/node_modules ./api/node_modules
+COPY --from=production-dependencies /app/packages/api/node_modules ./packages/api/node_modules
+COPY --from=production-dependencies /app/packages/data-provider/node_modules ./packages/data-provider/node_modules
+COPY --from=production-dependencies /app/packages/data-schemas/node_modules ./packages/data-schemas/node_modules
 COPY api ./api
 COPY config ./config
 COPY skill ./skill

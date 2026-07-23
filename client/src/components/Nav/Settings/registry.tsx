@@ -35,6 +35,7 @@ import SharedLinks from '../SettingsTabs/Data/SharedLinks';
 import { showThinkingAtom } from '~/store/showThinking';
 import ProviderKeys from '../SettingsTabs/ProviderKeys';
 import Avatar from '../SettingsTabs/Account/Avatar';
+import LingxingDataSource from '../SettingsTabs/DataSources/LingxingDataSource';
 import About from '../SettingsTabs/About/About';
 import ApiKeys from '../SettingsTabs/ApiKeys';
 import MemoryToggle from './MemoryToggle';
@@ -531,6 +532,14 @@ export const registry: SettingEntry[] = [
     labelKey: 'com_ui_settings_label_backup_codes',
     show: (ctx) => ctx.isLocalProvider && ctx.twoFactorEnabled,
     Component: BackupCodesItem,
+  },
+  {
+    id: 'lingxingDataSource',
+    tab: ACCOUNT,
+    section: 'dataSources',
+    labelKey: 'com_ui_settings_label_lingxing_erp',
+    keywords: ['lingxing', 'erp', 'mcp', 'datasource', '领星', '数据源'],
+    Component: LingxingDataSource,
   },
   // Account · Billing
   {

@@ -8,15 +8,9 @@ const models = require('@librechat/data-schemas').createModels(mongoose);
 const { SystemRoles } = require('librechat-data-provider');
 
 const verifyOnly = process.argv.includes('--verify');
-const enabled = process.env.PHASE3_SELLERSPRITE_ENABLED === 'true';
-const phase4Enabled = process.env.PHASE4_LINGXING_ENABLED === 'true';
-const mcpEnabled = enabled || phase4Enabled;
-const allowedCustomRoles = new Set([
-  ...(enabled ? ['admin', 'operation', 'advertising'] : []),
-  ...(phase4Enabled ? ['admin', 'operation', 'advertising', 'finance'] : []),
-]);
+const enabled = process.env.PHASE4_LINGXING_ENABLED === 'true';
+const allowedCustomRoles = new Set(enabled ? ['admin', 'operation', 'advertising', 'finance'] : []);
 const customRoles = ['admin', 'technical', 'operation', 'advertising', 'finance', 'viewer'];
-const departments = ['管理层', '技术部', '运营部', '广告组', '财务组', '只读访客'];
 
 const permissionsFor = (use) => ({
   USE: use,
@@ -31,7 +25,7 @@ async function seed() {
   const { Role } = models;
   await Role.updateOne(
     { name: SystemRoles.ADMIN, tenantId: { $exists: false } },
-    { $set: { 'permissions.MCP_SERVERS': permissionsFor(mcpEnabled) } },
+    { $set: { 'permissions.MCP_SERVERS': permissionsFor(enabled) } },
   );
   await Role.updateOne(
     { name: SystemRoles.USER, tenantId: { $exists: false } },
@@ -46,7 +40,7 @@ async function seed() {
 }
 
 async function verify() {
-  const { Role, Group } = models;
+  const { Role } = models;
   const roles = await Role.find({
     name: { $in: [SystemRoles.ADMIN, SystemRoles.USER, ...customRoles] },
     tenantId: { $exists: false },
@@ -54,13 +48,11 @@ async function verify() {
     .select('name permissions.MCP_SERVERS')
     .lean();
   const expected = new Map([
-    [SystemRoles.ADMIN, mcpEnabled],
+    [SystemRoles.ADMIN, enabled],
     [SystemRoles.USER, false],
     ...customRoles.map((name) => [name, allowedCustomRoles.has(name)]),
   ]);
-  if (roles.length !== expected.size) {
-    throw new Error(`Expected ${expected.size} roles, found ${roles.length}.`);
-  }
+  if (roles.length !== expected.size) throw new Error(`Expected ${expected.size} roles, found ${roles.length}`);
   for (const role of roles) {
     const actual = role.permissions?.MCP_SERVERS;
     if (
@@ -70,20 +62,10 @@ async function verify() {
       actual?.SHARE_PUBLIC ||
       actual?.CONFIGURE_OBO
     ) {
-      throw new Error(`MCP permission mismatch for role ${role.name}.`);
+      throw new Error(`MCP permission mismatch for role ${role.name}`);
     }
   }
-  const groupCount = await Group.countDocuments({
-    name: { $in: departments },
-    source: 'local',
-    tenantId: { $exists: false },
-  });
-  if (groupCount !== departments.length) {
-    throw new Error(`Expected ${departments.length} department groups, found ${groupCount}.`);
-  }
-  console.log(
-    `PHASE3_RBAC_OK enabled=${enabled} phase4Enabled=${phase4Enabled} roles=${roles.length} departments=${groupCount}`,
-  );
+  console.log(`PHASE4_RBAC_OK enabled=${enabled} roles=${roles.length}`);
 }
 
 (async () => {
@@ -94,7 +76,7 @@ async function verify() {
     await mongoose.disconnect();
     process.exit(0);
   } catch (error) {
-    console.error(`PHASE3_RBAC_ERROR ${error.message}`);
+    console.error(`PHASE4_RBAC_ERROR ${error.message}`);
     await mongoose.disconnect().catch(() => undefined);
     process.exit(1);
   }
