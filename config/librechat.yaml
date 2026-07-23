@@ -1,0 +1,50 @@
+version: 1.3.13
+cache: true
+
+interface:
+  customWelcome: '欢迎使用沃达跨境电商AI平台'
+  fileSearch: false
+  modelSelect: false
+  parameters: false
+  presets: false
+  prompts:
+    use: true
+    create: true
+    share: false
+    public: false
+  bookmarks: true
+  multiConvo: true
+  memories: false
+  runCode: false
+  webSearch: false
+  agents:
+    use: false
+    create: false
+    share: false
+    public: false
+  peoplePicker:
+    users: false
+    groups: false
+    roles: false
+  marketplace:
+    use: false
+  mcpServers:
+    use: false
+    create: false
+    share: false
+    public: false
+    configureObo: false
+  remoteAgents:
+    use: false
+    create: false
+    share: false
+    public: false
+  skills: false
+  sharedLinks: false
+  fileCitations: false
+
+memory:
+  disabled: true
+
+registration:
+  socialLogins: []

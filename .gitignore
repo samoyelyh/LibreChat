@@ -74,10 +74,15 @@ bower_components/
 #config file
 librechat.yaml
 librechat.yml
+!config/librechat.yaml
 
 # Environment
 .npmrc
 .env*
+!.env.example
+!deploy/.env.example
+deploy/backups/
+deploy/runtime/
 my.secrets
 !**/.env.example
 !**/.env.test.example

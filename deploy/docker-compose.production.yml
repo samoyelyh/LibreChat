@@ -1,0 +1,220 @@
+name: woda-cross-border-ai
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: '5'
+
+x-security: &default-security
+  security_opt:
+    - no-new-privileges:true
+
+services:
+  nginx:
+    image: nginx@sha256:30f1c0d78e0ad60901648be663a710bdadf19e4c10ac6782c235200619158284
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+      admin-panel:
+        condition: service_healthy
+    ports:
+      - '${USER_PORT:-7999}:80'
+      - '3000:3000'
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    tmpfs:
+      - /var/cache/nginx
+      - /var/run
+    networks:
+      - edge
+    healthcheck:
+      test: [CMD-SHELL, 'wget -qO- http://127.0.0.1/health | grep -q OK']
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    logging: *default-logging
+    <<: *default-security
+
+  api:
+    image: ghcr.io/danny-avila/librechat-dev-api@sha256:91a1f259ee8902875f142c4efd3f36dd17fd87931f9f0070c059b952244b3694
+    restart: unless-stopped
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      meilisearch:
+        condition: service_healthy
+      rag-api:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      HOST: 0.0.0.0
+      PORT: 3080
+      NODE_ENV: production
+      MONGO_URI: mongodb://${MONGO_ROOT_USERNAME}:${MONGO_ROOT_PASSWORD}@mongodb:27017/LibreChat?authSource=admin
+      MEILI_HOST: http://meilisearch:7700
+      RAG_API_URL: http://rag-api:${RAG_PORT:-8000}
+      NO_PROXY: localhost,127.0.0.1,::1,mongodb,meilisearch,vectordb,rag-api,admin-panel,nginx
+      no_proxy: localhost,127.0.0.1,::1,mongodb,meilisearch,vectordb,rag-api,admin-panel,nginx
+    volumes:
+      - ../config/librechat.yaml:/app/librechat.yaml:ro
+      - ./seed-phase1-rbac.js:/app/deploy/seed-phase1-rbac.js:ro
+      - ./verify-user-isolation.js:/app/deploy/verify-user-isolation.js:ro
+      - ./verify-admin-api.js:/app/deploy/verify-admin-api.js:ro
+      - uploads:/app/uploads
+      - api_logs:/app/api/logs
+    networks:
+      - edge
+      - backend
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - node -e "fetch('http://127.0.0.1:3080/readyz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 60s
+    labels:
+      org.opencontainers.image.version: v0.8.7
+      org.opencontainers.image.revision: 9e74cc0e57b395926122bd4062c1fcedc48ed465
+    logging: *default-logging
+    <<: *default-security
+
+  admin-panel:
+    image: ghcr.io/clickhouse/librechat-admin-panel@sha256:9a78851f84f448eab780ac658c4d17db51974c240492affc789a72d61e35f678
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      PORT: 3000
+      SESSION_SECRET: ${ADMIN_PANEL_SESSION_SECRET}
+      API_SERVER_URL: http://api:3080
+      VITE_API_BASE_URL: ${DOMAIN_CLIENT}
+      SESSION_COOKIE_SECURE: ${ADMIN_PANEL_SESSION_COOKIE_SECURE:-false}
+    networks:
+      - edge
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - node -e "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))"
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 45s
+    logging: *default-logging
+    <<: *default-security
+
+  mongodb:
+    image: mongo@sha256:098862b1339f031900ca66cf8fef799e616d6324fa41b9a263f2ec899552c1ef
+    restart: unless-stopped
+    command: [mongod, --auth, --bind_ip_all]
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - backend
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - 'mongosh --quiet --host 127.0.0.1 --authenticationDatabase admin --username "$$MONGO_INITDB_ROOT_USERNAME" --password "$$MONGO_INITDB_ROOT_PASSWORD" --eval "quit(db.runCommand({ ping: 1 }).ok ? 0 : 1)"'
+      interval: 15s
+      timeout: 8s
+      retries: 20
+      start_period: 30s
+    logging: *default-logging
+    <<: *default-security
+
+  meilisearch:
+    image: getmeili/meilisearch@sha256:8b57fc3c7f46535ddef3828df1538465ac19d892eb57c9a10da6df0880bd5856
+    restart: unless-stopped
+    environment:
+      MEILI_NO_ANALYTICS: 'true'
+      MEILI_ENV: production
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY}
+    volumes:
+      - meili_data:/meili_data
+    networks:
+      - backend
+    healthcheck:
+      test: [CMD-SHELL, 'wget -qO- http://127.0.0.1:7700/health | grep -q available']
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    logging: *default-logging
+    <<: *default-security
+
+  vectordb:
+    image: pgvector/pgvector@sha256:8809cfffff0082cf260c9ac752f1dd1afc77f6f0a55c4e6411321e78efc3d9a5
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - backend
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+    logging: *default-logging
+    <<: *default-security
+
+  rag-api:
+    image: ghcr.io/danny-avila/librechat-rag-api-dev-lite@sha256:c0ad82657b556c1e16dcfca85d045788f67caa223e25e70eb687f4d16b41dedc
+    restart: unless-stopped
+    depends_on:
+      vectordb:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      DB_HOST: vectordb
+      DB_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      RAG_PORT: ${RAG_PORT:-8000}
+      # The pinned RAG image rejects an explicitly empty provider. Keep the
+      # service bootable in Phase 1 without adding an external model secret;
+      # embeddings are not exposed until a later phase configures RAG.
+      EMBEDDINGS_PROVIDER: ${EMBEDDINGS_PROVIDER:-openai}
+      EMBEDDINGS_MODEL: ${EMBEDDINGS_MODEL:-text-embedding-3-small}
+      # RAG is globally disabled for Phase 1. These non-secret, loopback-only
+      # values satisfy startup validation and make accidental calls fail closed.
+      RAG_OPENAI_API_KEY: ${RAG_OPENAI_API_KEY:-phase1-disabled-no-secret}
+      RAG_OPENAI_BASEURL: ${RAG_OPENAI_BASEURL:-http://127.0.0.1:9/v1}
+    networks:
+      - backend
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:${RAG_PORT:-8000}/health', timeout=3)"
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 45s
+    logging: *default-logging
+    <<: *default-security
+
+networks:
+  edge:
+  backend:
+    internal: true
+
+volumes:
+  mongodb_data:
+  meili_data:
+  postgres_data:
+  uploads:
+  api_logs:
