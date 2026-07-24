@@ -31,6 +31,13 @@ else
   fail 'LibreChat Lingxing MCP configuration is incomplete'
 fi
 
+if sed -n '/^mcpServers:/,/^endpoints:/p' "$ROOT_DIR/config/librechat.yaml" \
+  | grep -q 'LIBRECHAT_BODY_'; then
+  fail 'MCP initialization depends on unavailable request-body placeholders'
+else
+  pass 'MCP initialization uses only connection-safe identity placeholders'
+fi
+
 status=$(curl -sS -o /tmp/phase4-unauth.json -w '%{http_code}' \
   "http://127.0.0.1:${USER_PORT:-7999}/api/lingxing/status" || true)
 if [[ "$status" == 401 ]] && grep -q unauthorized /tmp/phase4-unauth.json; then

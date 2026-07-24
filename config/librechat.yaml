@@ -59,8 +59,6 @@ mcpServers:
       X-LibreChat-User-ID: '{{LIBRECHAT_USER_ID}}'
       X-LibreChat-User-Email: '{{LIBRECHAT_USER_EMAIL}}'
       X-LibreChat-User-Role: '{{LIBRECHAT_USER_ROLE}}'
-      X-LibreChat-Conversation-ID: '{{LIBRECHAT_BODY_CONVERSATIONID}}'
-      X-LibreChat-Message-ID: '{{LIBRECHAT_BODY_MESSAGEID}}'
     requiresOAuth: false
     timeout: 120000
     initTimeout: 30000
@@ -78,8 +76,6 @@ mcpServers:
       X-LibreChat-User-ID: '{{LIBRECHAT_USER_ID}}'
       X-LibreChat-User-Email: '{{LIBRECHAT_USER_EMAIL}}'
       X-LibreChat-User-Role: '{{LIBRECHAT_USER_ROLE}}'
-      X-LibreChat-Conversation-ID: '{{LIBRECHAT_BODY_CONVERSATIONID}}'
-      X-LibreChat-Message-ID: '{{LIBRECHAT_BODY_MESSAGEID}}'
     requiresOAuth: false
     timeout: 120000
     initTimeout: 30000
