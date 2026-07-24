@@ -29,8 +29,8 @@ Role 是单用户岗位权限，Group 是部门归属，两者不得混作同一
 
 ## Phase 2 AI 权限补充
 
-- 只有存在 `active` AI Gateway 映射的 LibreChat 用户才能访问公司模型；本阶段只映射一个非管理员测试用户。
-- 用户只能看到映射中的模型白名单，当前为 `kimi-k2`；伪造模型 ID 会在 Adapter 后端返回 403。
+- 只有存在 `active` AI Gateway 映射的 LibreChat 用户才能访问公司模型；当前唯一映射属于系统 `ADMIN`，原 Phase 2 测试用户已取消映射。
+- 用户只能看到映射中的模型白名单；2026-07-24 已从 New API 显式同步 29 个模型，伪造或未同步的模型 ID 会在 Adapter 后端返回 403。
 - 用户不能提供或覆盖 New API Base URL、Token 或最终 `Authorization` Header。
 - 余额与使用记录接口根据 LibreChat JWT 的用户 ID 和 Email 再次匹配映射；不能读取其他用户数据。
 - 角色与部门没有在 Phase 2 自动获得 AI 权限。批量开通、部门策略和完整模型权限管理仍属于 Phase 5。
