@@ -15,7 +15,7 @@ set_env() {
 }
 
 # No Lingxing user key is requested here. Users add it after login.
-set_env LINGXING_MCP_URL "https://mcp.lingxing.com/erp/mcp"
+set_env LINGXING_MCP_URL "https://openmcp.lingxing.com/mcp-servers/lingxing-mcp"
 set_env LINGXING_MCP_INTERNAL_KEY "$(openssl rand -hex 32)"
 set_env LINGXING_MCP_ENCRYPTION_KEY "$(openssl rand -base64 32 | tr -d '\n')"
 set_env LINGXING_MCP_GATEWAY_PORT "4300"

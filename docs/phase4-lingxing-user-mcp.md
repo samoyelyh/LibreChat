@@ -4,7 +4,7 @@
 
 Phase 4 将领星 ERP 作为逐用户数据源接入，不引入共享公司密钥，不开放任何写工具，也不创建业务 Agent。用户在 LibreChat 的“设置 → 账号 → 我的数据源 → 领星 ERP”自行新增、覆盖、测试或删除密钥；系统管理员可在同一页面的管理员区域为目标用户代配置、测试和撤销。
 
-领星官方 MCP 地址固定为 `https://mcp.lingxing.com/erp/mcp`，鉴权 Header 为 `X-Mcp-Key`。密钥属于具体领星账号，泄露后应在领星重新生成。
+领星官方 MCP 地址为 `https://openmcp.lingxing.com/mcp-servers/lingxing-mcp`，鉴权 Header 为 `X-Mcp-Key`，传输方式为 Streamable HTTP。密钥属于具体领星账号，泄露后应在领星重新生成。
 
 ## 安全设计
 

@@ -273,7 +273,7 @@ services:
       LINGXING_MCP_GATEWAY_PORT: ${LINGXING_MCP_GATEWAY_PORT:-4300}
       LINGXING_MCP_INTERNAL_KEY: ${LINGXING_MCP_INTERNAL_KEY}
       LINGXING_MCP_ENCRYPTION_KEY: ${LINGXING_MCP_ENCRYPTION_KEY}
-      LINGXING_MCP_URL: ${LINGXING_MCP_URL:-https://mcp.lingxing.com/erp/mcp}
+      LINGXING_MCP_URL: ${LINGXING_MCP_URL:-https://openmcp.lingxing.com/mcp-servers/lingxing-mcp}
       LINGXING_MCP_MONGO_URI: mongodb://${LINGXING_MCP_DB_USERNAME}:${LINGXING_MCP_DB_PASSWORD}@mongodb:27017/${LINGXING_MCP_DB:-lingxing_mcp_gateway}?authSource=${LINGXING_MCP_DB:-lingxing_mcp_gateway}
       LINGXING_MCP_LIBRECHAT_DB: LibreChat
       LINGXING_MCP_DB: ${LINGXING_MCP_DB:-lingxing_mcp_gateway}
