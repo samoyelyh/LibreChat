@@ -67,6 +67,7 @@ services:
       PORT: 3080
       NODE_ENV: production
       MONGO_URI: mongodb://${MONGO_ROOT_USERNAME}:${MONGO_ROOT_PASSWORD}@mongodb:27017/LibreChat?authSource=admin
+      CUSTOM_FOOTER: ${CUSTOM_FOOTER:-}
       MEILI_HOST: http://meilisearch:7700
       RAG_API_URL: http://rag-api:${RAG_PORT:-8000}
       NO_PROXY: localhost,127.0.0.1,::1,mongodb,meilisearch,vectordb,rag-api,redis,ai-quota-adapter,sellersprite-mcp-gateway,lingxing-mcp-gateway,admin-panel,nginx
