@@ -33,17 +33,23 @@ done
 }
 "$DEPLOY_DIR/init-ai-adapter-mongo.sh"
 "$DEPLOY_DIR/init-sellersprite-mongo.sh"
+"$DEPLOY_DIR/init-lingxing-mongo.sh"
 compose up -d --remove-orphans
+# Bind-mounted Nginx configuration changes do not alter Compose's container
+# hash, so explicitly reload the proxy after every deployment.
+compose restart nginx >/dev/null
 
 for _ in $(seq 1 60); do
   if curl -fsS "http://127.0.0.1:${USER_PORT}/readyz" >/dev/null && curl -fsS http://127.0.0.1:3000/health >/dev/null; then
     "$DEPLOY_DIR/seed-phase3-rbac.sh" seed >/dev/null
-    printf 'Phase 3 endpoints are ready.\n'
+    "$DEPLOY_DIR/seed-phase4-rbac.sh" seed >/dev/null
+    "$DEPLOY_DIR/seed-phase5-private-skills.sh" seed >/dev/null
+    printf 'Phase 5 private Skills and shared Agents are ready.\n'
     exit 0
   fi
   sleep 5
 done
 
 compose ps
-printf 'Timed out waiting for Phase 2 readiness.\n' >&2
+printf 'Timed out waiting for Phase 4 readiness.\n' >&2
 exit 1

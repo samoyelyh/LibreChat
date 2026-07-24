@@ -476,6 +476,7 @@ export type CreateSkillInput = {
   displayTitle?: string;
   description: string;
   body?: string;
+  executionOnly?: boolean;
   frontmatter?: Record<string, unknown>;
   category?: string;
   author: Types.ObjectId;
@@ -496,6 +497,7 @@ export type UpdateSkillInput = {
   displayTitle?: string;
   description?: string;
   body?: string;
+  executionOnly?: boolean;
   frontmatter?: Record<string, unknown>;
   category?: string;
   alwaysApply?: boolean;
@@ -1085,6 +1087,7 @@ export function createSkillMethods(
       displayTitle: data.displayTitle,
       description: data.description,
       body: data.body ?? '',
+      executionOnly: data.executionOnly ?? false,
       frontmatter: data.frontmatter ?? {},
       category: data.category ?? '',
       author: data.author,
@@ -1234,7 +1237,7 @@ export function createSkillMethods(
          still called below as defensive code; it short-circuits when
          `frontmatter` is undefined. */
       .select(
-        'name displayTitle description category author authorName version source sourceMetadata fileCount alwaysApply tenantId disableModelInvocation userInvocable allowedTools createdAt updatedAt',
+        'name displayTitle description category author authorName version source sourceMetadata fileCount alwaysApply executionOnly tenantId disableModelInvocation userInvocable allowedTools createdAt updatedAt',
       )
       .lean();
 
@@ -1391,6 +1394,7 @@ export function createSkillMethods(
     if (update.displayTitle !== undefined) setPayload.displayTitle = update.displayTitle;
     if (update.description !== undefined) setPayload.description = update.description;
     if (update.body !== undefined) setPayload.body = update.body;
+    if (update.executionOnly !== undefined) setPayload.executionOnly = update.executionOnly;
     if (update.source !== undefined) setPayload.source = update.source;
     if (update.sourceMetadata !== undefined) setPayload.sourceMetadata = update.sourceMetadata;
     if (update.frontmatter !== undefined) {

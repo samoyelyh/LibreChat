@@ -13,15 +13,15 @@
 
 ## 生产镜像锁
 
-| 服务 | 不可变镜像 |
-|---|---|
-| Nginx | `nginx@sha256:30f1c0d78e0ad60901648be663a710bdadf19e4c10ac6782c235200619158284` |
-| LibreChat API | `ghcr.io/danny-avila/librechat-dev-api@sha256:91a1f259ee8902875f142c4efd3f36dd17fd87931f9f0070c059b952244b3694` |
-| Admin Panel | `ghcr.io/clickhouse/librechat-admin-panel@sha256:9a78851f84f448eab780ac658c4d17db51974c240492affc789a72d61e35f678` |
-| MongoDB | `mongo@sha256:098862b1339f031900ca66cf8fef799e616d6324fa41b9a263f2ec899552c1ef` |
-| Meilisearch | `getmeili/meilisearch@sha256:8b57fc3c7f46535ddef3828df1538465ac19d892eb57c9a10da6df0880bd5856` |
-| PostgreSQL/pgvector | `pgvector/pgvector@sha256:8809cfffff0082cf260c9ac752f1dd1afc77f6f0a55c4e6411321e78efc3d9a5` |
-| RAG API | `ghcr.io/danny-avila/librechat-rag-api-dev-lite@sha256:c0ad82657b556c1e16dcfca85d045788f67caa223e25e70eb687f4d16b41dedc` |
+| 服务                | 不可变镜像                                                                                                               |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Nginx               | `nginx@sha256:30f1c0d78e0ad60901648be663a710bdadf19e4c10ac6782c235200619158284`                                          |
+| LibreChat API       | `ghcr.io/danny-avila/librechat-dev-api@sha256:91a1f259ee8902875f142c4efd3f36dd17fd87931f9f0070c059b952244b3694`          |
+| Admin Panel         | `ghcr.io/clickhouse/librechat-admin-panel@sha256:9a78851f84f448eab780ac658c4d17db51974c240492affc789a72d61e35f678`       |
+| MongoDB             | `mongo@sha256:098862b1339f031900ca66cf8fef799e616d6324fa41b9a263f2ec899552c1ef`                                          |
+| Meilisearch         | `getmeili/meilisearch@sha256:8b57fc3c7f46535ddef3828df1538465ac19d892eb57c9a10da6df0880bd5856`                           |
+| PostgreSQL/pgvector | `pgvector/pgvector@sha256:8809cfffff0082cf260c9ac752f1dd1afc77f6f0a55c4e6411321e78efc3d9a5`                              |
+| RAG API             | `ghcr.io/danny-avila/librechat-rag-api-dev-lite@sha256:c0ad82657b556c1e16dcfca85d045788f67caa223e25e70eb687f4d16b41dedc` |
 
 ## 服务器预检（脱敏）
 
@@ -84,6 +84,18 @@
 - 根据用户 2026-07-23 的明确授权，SSH 从“每阶段临时密钥”调整为本机长期项目专用 ED25519 密钥；密钥不进入 Git。失败的临时公钥已从服务器删除，临时私钥已从本机删除。
 
 Phase 2 没有实现 Phase 5 的自动 New API 用户开通、部门预算、额度调整后台和完整“我的额度”页面。当前余额与使用记录通过受 JWT 保护的 `/api/ai-quota/balance`、`/api/ai-quota/usage` 提供真实数据。
+
+## Phase 5 私有 Skill 与共享 Agent 实施记录（2026-07-24）
+
+- 两个管理员 Prompt 已迁移为 `executionOnly` Skill，并各自绑定一个共享业务 Agent；原 Prompt 保留为管理员历史源。
+- 内置 `ADMIN` 可创建、维护和非公开共享 Agent/Skill；内置 `USER` 与六个自定义角色仅有使用权限。
+- 普通用户能看到两个 Skill 安全摘要和两个共享 Agent；Skill 详情正文为空，frontmatter、来源元数据与附件读取接口均被拒绝。
+- Agent 运行时使用服务器端原始 Skill 正文；工具卡片只返回加载状态，不直接返回正文。
+- New API 仍为一用户一密钥。当前只有系统管理员有一个 `active` 映射并允许 29 个模型，测试用户没有映射，未复制或借用管理员 Token。
+- 完整 LibreChat 生产镜像构建成功，后端 TypeScript 和前端 9305 个模块编译通过。
+- `verify-phase5.sh` 返回 `PHASE5_VERIFY_OK`；Phase 2、Phase 3、Phase 4 回归均通过。
+- 路由 Jest 套件因 `mongodb-memory-server` 不支持 Alpine 而在数据库启动前中止；新增隔离规则已通过真实 MongoDB 的管理员/普通用户 API 测试。
+- 部署前备份：`/opt/cross-border-ai/deploy/backups/20260724T102044Z`。
 
 ## Phase 3 实施记录（2026-07-23）
 

@@ -42,6 +42,12 @@ compose exec -T mongodb sh -lc 'mongodump --quiet --authenticationDatabase admin
 docker cp "$mongo_container:/tmp/sellersprite-mongodb.archive.gz" "$backup_dir/sellersprite-mongodb.archive.gz"
 compose exec -T mongodb rm -f /tmp/sellersprite-mongodb.archive.gz
 
+# Lingxing credentials are encrypted with AES-256-GCM. The encryption key is
+# present only in the protected deploy.env copy stored in this mode-0700 folder.
+compose exec -T mongodb sh -lc 'mongodump --quiet --authenticationDatabase admin --username "$MONGO_INITDB_ROOT_USERNAME" --password "$MONGO_INITDB_ROOT_PASSWORD" --db "${LINGXING_MCP_DB:-lingxing_mcp_gateway}" --archive=/tmp/lingxing-mongodb.archive.gz --gzip'
+docker cp "$mongo_container:/tmp/lingxing-mongodb.archive.gz" "$backup_dir/lingxing-mongodb.archive.gz"
+compose exec -T mongodb rm -f /tmp/lingxing-mongodb.archive.gz
+
 find "$backup_dir" -maxdepth 1 -type f ! -name SHA256SUMS -print0 \
   | sort -z \
   | xargs -0 sha256sum > "$backup_dir/SHA256SUMS"

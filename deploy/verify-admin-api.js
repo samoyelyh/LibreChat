@@ -17,6 +17,8 @@ const requiredDisabled = [
   ['sharedLinks'],
 ];
 const phase3SellerSpriteEnabled = process.env.PHASE3_SELLERSPRITE_ENABLED === 'true';
+const phase4LingxingEnabled = process.env.PHASE4_LINGXING_ENABLED === 'true';
+const anyMcpEnabled = phase3SellerSpriteEnabled || phase4LingxingEnabled;
 
 const readPath = (value, keys) => keys.reduce((current, key) => current?.[key], value);
 
@@ -61,11 +63,11 @@ const readPath = (value, keys) => keys.reduce((current, key) => current?.[key], 
       }
     }
     const mcpUse = readPath(config.interface, ['mcpServers', 'use']);
-    if (!phase3SellerSpriteEnabled && mcpUse !== false) {
+    if (!anyMcpEnabled && mcpUse !== false) {
       throw new Error('Phase 1 requires interface.mcpServers.use=false.');
     }
     console.log(
-      `PHASE1_ADMIN_API_OK users=200 roles=200 groups=200 config=200 phase3_role_scoped=${phase3SellerSpriteEnabled}`,
+      `PHASE1_ADMIN_API_OK users=200 roles=200 groups=200 config=200 phase3_role_scoped=${phase3SellerSpriteEnabled} phase4_role_scoped=${phase4LingxingEnabled}`,
     );
     process.exit(0);
   } catch (error) {

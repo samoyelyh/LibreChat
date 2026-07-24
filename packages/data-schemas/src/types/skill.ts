@@ -32,6 +32,11 @@ export interface ISkill {
   /** The SKILL.md body (markdown after the YAML frontmatter). */
   body: string;
   /**
+   * When `true`, users with view-only ACL access can invoke the skill but
+   * cannot retrieve its body, frontmatter, or bundled file contents.
+   */
+  executionOnly?: boolean;
+  /**
    * Structured YAML frontmatter (excluding `name` and `description`, which live as
    * top-level columns). Stored as Mongoose Mixed so callers can extend without schema
    * churn; validated in strict mode via `validateSkillFrontmatter` — unknown keys

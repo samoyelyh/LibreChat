@@ -30,6 +30,7 @@ export type SectionId =
   | 'danger'
   | 'profile'
   | 'security'
+  | 'dataSources'
   | 'billing'
   | 'about';
 
@@ -122,6 +123,7 @@ export const TABS: TabMeta[] = [
     sections: [
       { id: 'profile', labelKey: 'com_ui_settings_section_profile' },
       { id: 'security', labelKey: 'com_ui_settings_section_security' },
+      { id: 'dataSources', labelKey: 'com_ui_settings_section_data_sources' },
       { id: 'billing', labelKey: 'com_ui_settings_section_billing' },
       { id: 'danger', labelKey: 'com_ui_settings_section_danger_zone', danger: true },
     ],

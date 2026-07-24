@@ -9,6 +9,8 @@ const { PrincipalType, SystemRoles } = require('librechat-data-provider');
 
 const verifyOnly = process.argv.includes('--verify');
 const phase3SellerSpriteEnabled = process.env.PHASE3_SELLERSPRITE_ENABLED === 'true';
+const phase4LingxingEnabled = process.env.PHASE4_LINGXING_ENABLED === 'true';
+const operationalMcpEnabled = phase3SellerSpriteEnabled || phase4LingxingEnabled;
 
 const deniedCapabilities = {
   AGENTS: { USE: false, CREATE: false, SHARE: false, SHARE_PUBLIC: false },
@@ -64,7 +66,7 @@ const roles = [
       multiConvo: true,
       temporaryChat: true,
       peoplePicker: true,
-      mcpUse: phase3SellerSpriteEnabled,
+      mcpUse: operationalMcpEnabled,
     }),
   },
   {
@@ -86,7 +88,7 @@ const roles = [
       multiConvo: true,
       temporaryChat: true,
       peoplePicker: false,
-      mcpUse: phase3SellerSpriteEnabled,
+      mcpUse: operationalMcpEnabled,
     }),
   },
   {
@@ -97,7 +99,7 @@ const roles = [
       multiConvo: true,
       temporaryChat: true,
       peoplePicker: false,
-      mcpUse: phase3SellerSpriteEnabled,
+      mcpUse: operationalMcpEnabled,
     }),
   },
   {
@@ -108,7 +110,7 @@ const roles = [
       multiConvo: false,
       temporaryChat: false,
       peoplePicker: false,
-      mcpUse: false,
+      mcpUse: phase4LingxingEnabled,
     }),
   },
   {
@@ -225,14 +227,15 @@ async function verify() {
   }
 
   const expectedMcpRoles = new Set(
-    phase3SellerSpriteEnabled ? ['admin', 'operation', 'advertising'] : [],
+    operationalMcpEnabled ? ['admin', 'operation', 'advertising'] : [],
   );
+  if (phase4LingxingEnabled) expectedMcpRoles.add('finance');
   for (const role of foundRoles) {
     if (role.permissions?.AGENTS?.USE) {
       throw new Error(`Agent permission unexpectedly enabled for role ${role.name}.`);
     }
     if (Boolean(role.permissions?.MCP_SERVERS?.USE) !== expectedMcpRoles.has(role.name)) {
-      throw new Error(`SellerSprite MCP permission mismatch for role ${role.name}.`);
+      throw new Error(`MCP permission mismatch for role ${role.name}.`);
     }
   }
 

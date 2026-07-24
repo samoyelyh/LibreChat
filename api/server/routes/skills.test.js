@@ -442,6 +442,60 @@ describe('Skill routes', () => {
       expect(res.body.name).toBe('demo-skill');
       expect(res.body.isPublic).toBe(false);
     });
+
+    it('redacts execution-only content for a viewer while preserving invocation metadata', async () => {
+      const created = await createSkillAsOwner({
+        executionOnly: true,
+        body: '# Confidential workflow',
+        frontmatter: { 'user-invocable': false },
+      });
+      await grantPermission({
+        principalType: PrincipalType.USER,
+        principalId: testUsers.editor._id,
+        resourceType: ResourceType.SKILL,
+        resourceId: created.body._id,
+        accessRoleId: AccessRoleIds.SKILL_VIEWER,
+        grantedBy: testUsers.owner._id,
+      });
+
+      setTestUser(testUsers.editor);
+      const res = await request(app).get(`/api/skills/${created.body._id}`);
+      expect(res.status).toBe(200);
+      expect(res.body.executionOnly).toBe(true);
+      expect(res.body.bodyRedacted).toBe(true);
+      expect(res.body.body).toBe('');
+      expect(res.body.frontmatter).toBeUndefined();
+      expect(res.body.userInvocable).toBe(false);
+
+      const persisted = await Skill.findById(created.body._id).lean();
+      expect(persisted.body).toBe('# Confidential workflow');
+    });
+
+    it('does not let a non-author editor disable execution-only protection', async () => {
+      const created = await createSkillAsOwner({
+        executionOnly: true,
+        body: '# Confidential workflow',
+      });
+      await grantPermission({
+        principalType: PrincipalType.USER,
+        principalId: testUsers.editor._id,
+        resourceType: ResourceType.SKILL,
+        resourceId: created.body._id,
+        accessRoleId: AccessRoleIds.SKILL_EDITOR,
+        grantedBy: testUsers.owner._id,
+      });
+
+      setTestUser(testUsers.editor);
+      const res = await request(app).patch(`/api/skills/${created.body._id}`).send({
+        expectedVersion: created.body.version,
+        executionOnly: false,
+      });
+      expect(res.status).toBe(403);
+
+      const persisted = await Skill.findById(created.body._id).lean();
+      expect(persisted.executionOnly).toBe(true);
+      expect(persisted.body).toBe('# Confidential workflow');
+    });
   });
 
   describe('PATCH /api/skills/:id (optimistic concurrency)', () => {
@@ -517,6 +571,22 @@ describe('Skill routes', () => {
       expect(res.status).toBe(200);
       expect(res.body.files).toEqual([]);
     });
+
+    it('denies file metadata for a viewer of an execution-only skill', async () => {
+      const created = await createSkillAsOwner({ executionOnly: true });
+      await grantPermission({
+        principalType: PrincipalType.USER,
+        principalId: testUsers.editor._id,
+        resourceType: ResourceType.SKILL,
+        resourceId: created.body._id,
+        accessRoleId: AccessRoleIds.SKILL_VIEWER,
+        grantedBy: testUsers.owner._id,
+      });
+
+      setTestUser(testUsers.editor);
+      const res = await request(app).get(`/api/skills/${created.body._id}/files`);
+      expect(res.status).toBe(403);
+    });
   });
 
   describe('POST /api/skills/:id/files (live)', () => {
@@ -537,6 +607,26 @@ describe('Skill routes', () => {
       expect(res.body.isBinary).toBe(false);
       expect(res.body.filename).toBe('SKILL.md');
       expect(res.body.content).toBeDefined();
+    });
+
+    it('denies SKILL.md for a viewer of an execution-only skill', async () => {
+      const created = await createSkillAsOwner({
+        executionOnly: true,
+        body: '# Confidential workflow',
+      });
+      await grantPermission({
+        principalType: PrincipalType.USER,
+        principalId: testUsers.editor._id,
+        resourceType: ResourceType.SKILL,
+        resourceId: created.body._id,
+        accessRoleId: AccessRoleIds.SKILL_VIEWER,
+        grantedBy: testUsers.owner._id,
+      });
+
+      setTestUser(testUsers.editor);
+      const res = await request(app).get(`/api/skills/${created.body._id}/files/SKILL.md`);
+      expect(res.status).toBe(403);
+      expect(res.body).not.toEqual(expect.objectContaining({ content: expect.any(String) }));
     });
 
     it('returns 404 for a nonexistent file', async () => {

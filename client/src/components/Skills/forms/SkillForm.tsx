@@ -313,11 +313,21 @@ export default function SkillForm({ skillId }: SkillFormProps) {
             )}
           />
 
-          <SkillContentEditor
-            name="body"
-            isEditing={isEditingContent}
-            setIsEditing={setIsEditingContent}
-          />
+          {skill.bodyRedacted ? (
+            <div
+              role="note"
+              className="flex items-start gap-2 rounded-md border border-border-medium bg-surface-secondary p-3 text-sm text-text-secondary"
+            >
+              <Info className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+              <span>{localize('com_ui_skill_execution_only')}</span>
+            </div>
+          ) : (
+            <SkillContentEditor
+              name="body"
+              isEditing={isEditingContent}
+              setIsEditing={setIsEditingContent}
+            />
+          )}
 
           {!readOnly && (
             <div className="mt-4 flex items-center justify-end gap-2">

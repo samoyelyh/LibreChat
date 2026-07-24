@@ -9,7 +9,12 @@ const { SystemRoles } = require('librechat-data-provider');
 
 const verifyOnly = process.argv.includes('--verify');
 const enabled = process.env.PHASE3_SELLERSPRITE_ENABLED === 'true';
-const allowedCustomRoles = new Set(enabled ? ['admin', 'operation', 'advertising'] : []);
+const phase4Enabled = process.env.PHASE4_LINGXING_ENABLED === 'true';
+const mcpEnabled = enabled || phase4Enabled;
+const allowedCustomRoles = new Set([
+  ...(enabled ? ['admin', 'operation', 'advertising'] : []),
+  ...(phase4Enabled ? ['admin', 'operation', 'advertising', 'finance'] : []),
+]);
 const customRoles = ['admin', 'technical', 'operation', 'advertising', 'finance', 'viewer'];
 const departments = ['管理层', '技术部', '运营部', '广告组', '财务组', '只读访客'];
 
@@ -26,7 +31,7 @@ async function seed() {
   const { Role } = models;
   await Role.updateOne(
     { name: SystemRoles.ADMIN, tenantId: { $exists: false } },
-    { $set: { 'permissions.MCP_SERVERS': permissionsFor(enabled) } },
+    { $set: { 'permissions.MCP_SERVERS': permissionsFor(mcpEnabled) } },
   );
   await Role.updateOne(
     { name: SystemRoles.USER, tenantId: { $exists: false } },
@@ -49,7 +54,7 @@ async function verify() {
     .select('name permissions.MCP_SERVERS')
     .lean();
   const expected = new Map([
-    [SystemRoles.ADMIN, enabled],
+    [SystemRoles.ADMIN, mcpEnabled],
     [SystemRoles.USER, false],
     ...customRoles.map((name) => [name, allowedCustomRoles.has(name)]),
   ]);
@@ -77,7 +82,7 @@ async function verify() {
     throw new Error(`Expected ${departments.length} department groups, found ${groupCount}.`);
   }
   console.log(
-    `PHASE3_RBAC_OK enabled=${enabled} roles=${roles.length} departments=${groupCount}`,
+    `PHASE3_RBAC_OK enabled=${enabled} phase4Enabled=${phase4Enabled} roles=${roles.length} departments=${groupCount}`,
   );
 }
 

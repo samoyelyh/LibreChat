@@ -106,6 +106,11 @@ const skillSchema: Schema<ISkillDocument> = new Schema(
       default: '',
       maxlength: [SKILL_BODY_MAX_LENGTH, `Body cannot exceed ${SKILL_BODY_MAX_LENGTH} characters`],
     },
+    executionOnly: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
     /**
      * Structured YAML frontmatter bag (everything except `name`/`description`,
      * which live as first-class columns). Validated in strict mode against

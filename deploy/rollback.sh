@@ -14,6 +14,7 @@ restore_db=${2:-}
 cp "$backup_dir/docker-compose.production.yml" "$COMPOSE_FILE"
 cp "$backup_dir/nginx.conf" "$DEPLOY_DIR/nginx.conf"
 cp "$backup_dir/librechat.yaml" "$ROOT_DIR/config/librechat.yaml"
+[[ ! -f "$backup_dir/deploy.env" ]] || install -m 0600 "$backup_dir/deploy.env" "$ENV_FILE"
 mkdir -p "$DEPLOY_DIR/runtime"
 if [[ -f "$backup_dir/images.override.yml" ]]; then
   cp "$backup_dir/images.override.yml" "$OVERRIDE_FILE"
@@ -42,6 +43,11 @@ if [[ "$restore_db" == '--restore-db' ]]; then
     docker cp "$backup_dir/sellersprite-mongodb.archive.gz" "$mongo_container:/tmp/sellersprite-mongodb.archive.gz"
     compose exec -T mongodb sh -lc 'mongorestore --quiet --drop --authenticationDatabase admin --username "$MONGO_INITDB_ROOT_USERNAME" --password "$MONGO_INITDB_ROOT_PASSWORD" --archive=/tmp/sellersprite-mongodb.archive.gz --gzip'
     compose exec -T mongodb rm -f /tmp/sellersprite-mongodb.archive.gz
+  fi
+  if [[ -f "$backup_dir/lingxing-mongodb.archive.gz" ]]; then
+    docker cp "$backup_dir/lingxing-mongodb.archive.gz" "$mongo_container:/tmp/lingxing-mongodb.archive.gz"
+    compose exec -T mongodb sh -lc 'mongorestore --quiet --drop --authenticationDatabase admin --username "$MONGO_INITDB_ROOT_USERNAME" --password "$MONGO_INITDB_ROOT_PASSWORD" --archive=/tmp/lingxing-mongodb.archive.gz --gzip'
+    compose exec -T mongodb rm -f /tmp/lingxing-mongodb.archive.gz
   fi
 fi
 

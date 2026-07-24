@@ -2,7 +2,7 @@
 
 ## 范围与结论
 
-Phase 2 只实现公司 AI 中转的最小闭环：单个测试用户映射、授权模型列表、非流式对话、SSE、取消传播、真实余额与使用记录查询。New API 是唯一计费账本，Adapter 不执行任何二次扣费。自动创建 New API 用户、部门预算、个人额度策略和完整余额页面留到 Phase 5。
+Phase 2 只实现公司 AI 中转的最小闭环：单用户映射、授权模型列表、非流式对话、SSE、取消传播、真实余额与使用记录查询。New API 是唯一计费账本，Adapter 不执行任何二次扣费。自动创建 New API 用户、部门预算、个人额度策略和完整余额页面留到 Phase 5。
 
 LibreChat v0.8.7 原生 Custom Endpoint 能解析 `{{LIBRECHAT_USER_ID}}` 与 `{{LIBRECHAT_USER_EMAIL}}`，因此本阶段没有修改 LibreChat 上游核心代码。LibreChat 只把已登录用户上下文传到内网 Adapter；Adapter 根据映射解密并注入该用户独立的 New API Token。
 
@@ -39,6 +39,14 @@ Adapter 独立数据库默认名为 `ai_quota_adapter`，包含：
 - `ai_gateway_call_audits`：请求 ID、用户、模型、路径、流式标记、状态、耗时、Token 计数和 New API Request ID。默认 90 天 TTL。
 
 LibreChat 原生 User、Conversation 和 Message 模型没有结构变化。
+
+## 2026-07-24 模型同步
+
+- 原 Phase 2 非管理员测试用户的唯一 AI Gateway 映射已转移给当前系统 `ADMIN`；测试用户不再拥有公司模型权限。
+- 使用该映射原有的加密 Token 只读请求 New API `GET /v1/models`，将当时返回的 29 个模型 ID 去重后同步到 `allowedModels`；没有输出或更换 Token。
+- LibreChat `GET /api/models` 已以当前管理员身份验证，`woda-ai` 返回 29 个模型。
+- 上游模型列表不是自动授权源。模型新增、移除或 New API 升级后，必须重新执行只读核验和显式白名单同步。
+- 图片和视频模型虽然在中转站模型列表中，但如果上游要求专用生成接口，不能保证可通过 LibreChat 的聊天对话接口调用。
 
 ## 公开与内部路由
 

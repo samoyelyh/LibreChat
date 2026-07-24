@@ -23,6 +23,8 @@ services:
         condition: service_healthy
       sellersprite-mcp-gateway:
         condition: service_healthy
+      lingxing-mcp-gateway:
+        condition: service_healthy
     ports:
       - '${USER_PORT:-7999}:80'
       - '3000:3000'
@@ -43,7 +45,7 @@ services:
     <<: *default-security
 
   api:
-    image: ghcr.io/danny-avila/librechat-dev-api@sha256:91a1f259ee8902875f142c4efd3f36dd17fd87931f9f0070c059b952244b3694
+    image: ${LIBRECHAT_IMAGE:-ghcr.io/danny-avila/librechat-dev-api@sha256:91a1f259ee8902875f142c4efd3f36dd17fd87931f9f0070c059b952244b3694}
     restart: unless-stopped
     depends_on:
       mongodb:
@@ -56,6 +58,8 @@ services:
         condition: service_healthy
       sellersprite-mcp-gateway:
         condition: service_healthy
+      lingxing-mcp-gateway:
+        condition: service_healthy
     env_file:
       - .env
     environment:
@@ -63,10 +67,11 @@ services:
       PORT: 3080
       NODE_ENV: production
       MONGO_URI: mongodb://${MONGO_ROOT_USERNAME}:${MONGO_ROOT_PASSWORD}@mongodb:27017/LibreChat?authSource=admin
+      CUSTOM_FOOTER: ${CUSTOM_FOOTER:-}
       MEILI_HOST: http://meilisearch:7700
       RAG_API_URL: http://rag-api:${RAG_PORT:-8000}
-      NO_PROXY: localhost,127.0.0.1,::1,mongodb,meilisearch,vectordb,rag-api,redis,ai-quota-adapter,sellersprite-mcp-gateway,admin-panel,nginx
-      no_proxy: localhost,127.0.0.1,::1,mongodb,meilisearch,vectordb,rag-api,redis,ai-quota-adapter,sellersprite-mcp-gateway,admin-panel,nginx
+      NO_PROXY: localhost,127.0.0.1,::1,mongodb,meilisearch,vectordb,rag-api,redis,ai-quota-adapter,sellersprite-mcp-gateway,lingxing-mcp-gateway,admin-panel,nginx
+      no_proxy: localhost,127.0.0.1,::1,mongodb,meilisearch,vectordb,rag-api,redis,ai-quota-adapter,sellersprite-mcp-gateway,lingxing-mcp-gateway,admin-panel,nginx
     volumes:
       - ../config/librechat.yaml:/app/librechat.yaml:ro
       - ./seed-phase1-rbac.js:/app/deploy/seed-phase1-rbac.js:ro
@@ -76,6 +81,10 @@ services:
       - ./seed-phase3-rbac.js:/app/deploy/seed-phase3-rbac.js:ro
       - ./verify-phase3-actors.js:/app/deploy/verify-phase3-actors.js:ro
       - ./verify-phase3-live.js:/app/deploy/verify-phase3-live.js:ro
+      - ./seed-phase4-rbac.js:/app/deploy/seed-phase4-rbac.js:ro
+      - ./verify-phase4-actors.js:/app/deploy/verify-phase4-actors.js:ro
+      - ./seed-phase5-private-skills.js:/app/deploy/seed-phase5-private-skills.js:ro
+      - ./verify-phase5-api.js:/app/deploy/verify-phase5-api.js:ro
       - uploads:/app/uploads
       - api_logs:/app/api/logs
     networks:
@@ -131,6 +140,7 @@ services:
       - mongodb_data:/data/db
       - ./init-ai-adapter-mongo.js:/opt/woda/init-ai-adapter-mongo.js:ro
       - ./init-sellersprite-mongo.js:/opt/woda/init-sellersprite-mongo.js:ro
+      - ./init-lingxing-mongo.js:/opt/woda/init-lingxing-mongo.js:ro
     networks:
       - backend
     healthcheck:
@@ -158,7 +168,11 @@ services:
     networks:
       - backend
     healthcheck:
-      test: [CMD-SHELL, 'REDISCLI_AUTH="$$REDIS_PASSWORD" redis-cli --no-auth-warning ping | grep -q PONG']
+      test:
+        [
+          CMD-SHELL,
+          'REDISCLI_AUTH="$$REDIS_PASSWORD" redis-cli --no-auth-warning ping | grep -q PONG',
+        ]
       interval: 10s
       timeout: 5s
       retries: 20
@@ -242,6 +256,45 @@ services:
       test:
         - CMD-SHELL
         - node -e "fetch('http://127.0.0.1:${SELLERSPRITE_MCP_GATEWAY_PORT:-4200}/readyz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    logging: *default-logging
+    <<: *default-security
+
+  lingxing-mcp-gateway:
+    image: ${LINGXING_MCP_GATEWAY_IMAGE:?Run deploy/build-lingxing-gateway.sh first}
+    restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      LINGXING_MCP_GATEWAY_HOST: 0.0.0.0
+      LINGXING_MCP_GATEWAY_PORT: ${LINGXING_MCP_GATEWAY_PORT:-4300}
+      LINGXING_MCP_INTERNAL_KEY: ${LINGXING_MCP_INTERNAL_KEY}
+      LINGXING_MCP_ENCRYPTION_KEY: ${LINGXING_MCP_ENCRYPTION_KEY}
+      LINGXING_MCP_URL: ${LINGXING_MCP_URL:-https://openmcp.lingxing.com/mcp-servers/lingxing-mcp}
+      LINGXING_MCP_MONGO_URI: mongodb://${LINGXING_MCP_DB_USERNAME}:${LINGXING_MCP_DB_PASSWORD}@mongodb:27017/${LINGXING_MCP_DB:-lingxing_mcp_gateway}?authSource=${LINGXING_MCP_DB:-lingxing_mcp_gateway}
+      LINGXING_MCP_LIBRECHAT_DB: LibreChat
+      LINGXING_MCP_DB: ${LINGXING_MCP_DB:-lingxing_mcp_gateway}
+      LINGXING_MCP_TIMEOUT_MS: ${LINGXING_MCP_TIMEOUT_MS:-120000}
+      LINGXING_MCP_AUDIT_RETENTION_DAYS: ${LINGXING_MCP_AUDIT_RETENTION_DAYS:-365}
+      JWT_SECRET: ${JWT_SECRET}
+      NO_PROXY: localhost,127.0.0.1,::1,mongodb
+      no_proxy: localhost,127.0.0.1,::1,mongodb
+    networks:
+      - edge
+      - backend
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - node -e "fetch('http://127.0.0.1:${LINGXING_MCP_GATEWAY_PORT:-4300}/readyz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
       interval: 10s
       timeout: 5s
       retries: 20
