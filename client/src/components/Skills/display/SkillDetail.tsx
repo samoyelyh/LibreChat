@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { format } from 'date-fns';
-import { Eye, Code, User, Calendar, EarthIcon, ScrollText } from 'lucide-react';
+import { Eye, Code, User, Calendar, EarthIcon, Info, ScrollText } from 'lucide-react';
 import { TooltipAnchor } from '@librechat/client';
 import type { TSkill } from 'librechat-data-provider';
 import { useLocalize, useAuthContext, useSkillPermissions, useSkillActiveState } from '~/hooks';
@@ -159,14 +159,15 @@ export default function SkillDetail({ skill, onEdit, onDelete }: SkillDetailProp
         <p className="whitespace-pre-wrap text-sm text-text-secondary">{skill.description}</p>
       </div>
 
-      {/* Divider with view toggle */}
-      <div className="flex items-center gap-3 py-1">
-        <hr className="flex-1 border-border-medium" />
-        <ViewToggle viewMode={viewMode} setViewMode={setViewMode} localize={localize} />
-      </div>
+      {!skill.bodyRedacted && (
+        <div className="flex items-center gap-3 py-1">
+          <hr className="flex-1 border-border-medium" />
+          <ViewToggle viewMode={viewMode} setViewMode={setViewMode} localize={localize} />
+        </div>
+      )}
 
       {/* Frontmatter metadata */}
-      {viewMode === 'rendered' && frontmatterFields.length > 0 && (
+      {!skill.bodyRedacted && viewMode === 'rendered' && frontmatterFields.length > 0 && (
         <div className="grid grid-cols-[max-content_1fr] items-baseline gap-x-8 gap-y-2 pb-2">
           {frontmatterFields.map(({ key, value }) => (
             <React.Fragment key={key}>
@@ -179,7 +180,15 @@ export default function SkillDetail({ skill, onEdit, onDelete }: SkillDetailProp
 
       {/* Content — fills remaining space, no card wrapper */}
       <div className="min-h-0 flex-1 overflow-auto">
-        {viewMode === 'rendered' ? (
+        {skill.bodyRedacted ? (
+          <div
+            role="note"
+            className="flex items-start gap-2 rounded-md border border-border-medium bg-surface-secondary p-3 text-sm text-text-secondary"
+          >
+            <Info className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+            <span>{localize('com_ui_skill_execution_only')}</span>
+          </div>
+        ) : viewMode === 'rendered' ? (
           <SkillMarkdownRenderer content={cleanBody} />
         ) : (
           <pre className="whitespace-pre-wrap font-mono text-sm leading-relaxed text-text-primary">

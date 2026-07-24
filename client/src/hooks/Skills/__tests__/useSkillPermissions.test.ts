@@ -24,6 +24,7 @@ function makeSkill(overrides: Partial<TSkill> = {}): TSkill {
     name: 'example-skill',
     description: 'A skill for the test.',
     body: '# Overview',
+    executionOnly: false,
     author: 'user-owner',
     authorName: 'Owner',
     version: 1,

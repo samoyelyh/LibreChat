@@ -18,9 +18,9 @@ interface:
   runCode: false
   webSearch: false
   agents:
-    use: false
-    create: false
-    share: false
+    use: true
+    create: true
+    share: true
     public: false
   peoplePicker:
     users: false
@@ -33,7 +33,12 @@ interface:
     create: false
     share: false
     public: false
-  skills: false
+  skills:
+    use: true
+    create: true
+    share: true
+    public: false
+    defaultActiveOnShare: true
   sharedLinks: false
   fileCitations: false
 

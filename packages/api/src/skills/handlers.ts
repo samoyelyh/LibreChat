@@ -4,6 +4,7 @@ import {
   AccessRoleIds,
   PrincipalType,
   PermissionBits,
+  SystemRoles,
 } from 'librechat-data-provider';
 import type {
   TSkill,
@@ -140,6 +141,7 @@ function serializeSourceMetadata(
 function serializeSkill(
   skill: ISkill & { _id: Types.ObjectId },
   isPublic: boolean | Set<string>,
+  bodyRedacted = false,
 ): TSkill {
   const pub = typeof isPublic === 'boolean' ? isPublic : isPublic.has(skill._id.toString());
   return {
@@ -147,8 +149,10 @@ function serializeSkill(
     name: skill.name,
     displayTitle: skill.displayTitle,
     description: skill.description,
-    body: skill.body,
-    frontmatter: serializeFrontmatter(skill.frontmatter),
+    body: bodyRedacted ? '' : skill.body,
+    executionOnly: skill.executionOnly === true,
+    bodyRedacted: bodyRedacted || undefined,
+    frontmatter: bodyRedacted ? undefined : serializeFrontmatter(skill.frontmatter),
     category: skill.category,
     disableModelInvocation: skill.disableModelInvocation,
     userInvocable: skill.userInvocable,
@@ -157,7 +161,7 @@ function serializeSkill(
     authorName: skill.authorName,
     version: skill.version,
     source: skill.source,
-    sourceMetadata: serializeSourceMetadata(skill.sourceMetadata),
+    sourceMetadata: bodyRedacted ? undefined : serializeSourceMetadata(skill.sourceMetadata),
     fileCount: skill.fileCount,
     alwaysApply: skill.alwaysApply,
     isPublic: pub,
@@ -178,6 +182,7 @@ function serializeSkillSummary(
     displayTitle: skill.displayTitle,
     description: skill.description,
     category: skill.category,
+    executionOnly: skill.executionOnly === true,
     disableModelInvocation: skill.disableModelInvocation,
     userInvocable: skill.userInvocable,
     allowedTools: skill.allowedTools,
@@ -193,6 +198,19 @@ function serializeSkillSummary(
     createdAt: (skill.createdAt ?? new Date()).toISOString(),
     updatedAt: (skill.updatedAt ?? new Date()).toISOString(),
   };
+}
+
+function canReadExecutionContent(
+  req: ServerRequest,
+  skill: ISkill & { _id: Types.ObjectId },
+): boolean {
+  if (!skill.executionOnly) {
+    return true;
+  }
+  if (req.user?.role === SystemRoles.ADMIN) {
+    return true;
+  }
+  return skill.author.toString() === req.user?.id;
 }
 
 function serializeSkillFile(file: ISkillFile & { _id: Types.ObjectId }): TSkillFile {
@@ -389,6 +407,7 @@ export function createSkillsHandlers(deps: SkillsHandlersDeps): {
           displayTitle: body.displayTitle,
           description: body.description,
           body: body.body,
+          executionOnly: body.executionOnly,
           frontmatter: body.frontmatter as Record<string, unknown> | undefined,
           category: body.category,
           alwaysApply: body.alwaysApply,
@@ -460,7 +479,7 @@ export function createSkillsHandlers(deps: SkillsHandlersDeps): {
         return res.status(404).json({ error: 'Skill not found' });
       }
       const pub = await isSkillPublic(skill._id);
-      return res.status(200).json(serializeSkill(skill, pub));
+      return res.status(200).json(serializeSkill(skill, pub, !canReadExecutionContent(req, skill)));
     } catch (error) {
       logger.error('[GET /skills/:id] Error fetching skill', error);
       return res.status(500).json({ error: 'Error fetching skill' });
@@ -470,6 +489,13 @@ export function createSkillsHandlers(deps: SkillsHandlersDeps): {
   async function patchHandler(req: ServerRequest, res: Response) {
     try {
       const { id } = req.params as { id: string };
+      const currentSkill = await getSkillById(id);
+      if (!currentSkill) {
+        return res.status(404).json({ error: 'Skill not found' });
+      }
+      if (!canReadExecutionContent(req, currentSkill)) {
+        return res.status(403).json({ error: 'Execution-only skill content is restricted' });
+      }
       const body = (req.body ?? {}) as TUpdateSkillPayload & { expectedVersion?: number };
       const { expectedVersion, ...rest } = body;
       // `typeof NaN === 'number'` is true, so we need the stricter isFinite/isInteger
@@ -492,6 +518,7 @@ export function createSkillsHandlers(deps: SkillsHandlersDeps): {
       if (rest.displayTitle !== undefined) update.displayTitle = rest.displayTitle;
       if (rest.description !== undefined) update.description = rest.description;
       if (rest.body !== undefined) update.body = rest.body;
+      if (rest.executionOnly !== undefined) update.executionOnly = rest.executionOnly;
       if (rest.frontmatter !== undefined) {
         update.frontmatter = rest.frontmatter as Record<string, unknown>;
       }
@@ -577,6 +604,13 @@ export function createSkillsHandlers(deps: SkillsHandlersDeps): {
   async function listFilesHandler(req: ServerRequest, res: Response) {
     try {
       const { id } = req.params as { id: string };
+      const skill = await getSkillById(id);
+      if (!skill) {
+        return res.status(404).json({ error: 'Skill not found' });
+      }
+      if (!canReadExecutionContent(req, skill)) {
+        return res.status(403).json({ error: 'Execution-only skill content is restricted' });
+      }
       const rows = await listSkillFiles(id);
       const response: TListSkillFilesResponse = { files: rows.map(serializeSkillFile) };
       return res.status(200).json(response);
@@ -600,6 +634,13 @@ export function createSkillsHandlers(deps: SkillsHandlersDeps): {
   async function downloadFileHandler(req: ServerRequest, res: Response) {
     try {
       const { id, relativePath } = req.params as { id: string; relativePath: string };
+      const skill = await getSkillById(id);
+      if (!skill) {
+        return res.status(404).json({ error: 'Skill not found' });
+      }
+      if (!canReadExecutionContent(req, skill)) {
+        return res.status(403).json({ error: 'Execution-only skill content is restricted' });
+      }
       let decodedPath: string;
       try {
         decodedPath = decodeURIComponent(relativePath);
@@ -609,10 +650,6 @@ export function createSkillsHandlers(deps: SkillsHandlersDeps): {
 
       // SKILL.md is the skill body itself, not a SkillFile document
       if (decodedPath === 'SKILL.md') {
-        const skill = await getSkillById(id);
-        if (!skill) {
-          return res.status(404).json({ error: 'Skill not found' });
-        }
         const response: TSkillFileContentResponse = {
           content: skill.body,
           mimeType: 'text/markdown',

@@ -83,6 +83,8 @@ services:
       - ./verify-phase3-live.js:/app/deploy/verify-phase3-live.js:ro
       - ./seed-phase4-rbac.js:/app/deploy/seed-phase4-rbac.js:ro
       - ./verify-phase4-actors.js:/app/deploy/verify-phase4-actors.js:ro
+      - ./seed-phase5-private-skills.js:/app/deploy/seed-phase5-private-skills.js:ro
+      - ./verify-phase5-api.js:/app/deploy/verify-phase5-api.js:ro
       - uploads:/app/uploads
       - api_logs:/app/api/logs
     networks:
@@ -166,7 +168,11 @@ services:
     networks:
       - backend
     healthcheck:
-      test: [CMD-SHELL, 'REDISCLI_AUTH="$$REDIS_PASSWORD" redis-cli --no-auth-warning ping | grep -q PONG']
+      test:
+        [
+          CMD-SHELL,
+          'REDISCLI_AUTH="$$REDIS_PASSWORD" redis-cli --no-auth-warning ping | grep -q PONG',
+        ]
       interval: 10s
       timeout: 5s
       retries: 20

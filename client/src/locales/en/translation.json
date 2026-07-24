@@ -1687,6 +1687,7 @@
   "com_ui_skill_description_required": "Description is required",
   "com_ui_skill_description_too_long": "Description must be {{0}} characters or fewer",
   "com_ui_skill_edit_title": "Edit skill",
+  "com_ui_skill_execution_only": "This execution-only skill can be used by its assigned agent, but its instructions and files are managed privately by an administrator.",
   "com_ui_skill_file_binary": "Binary file — cannot preview inline",
   "com_ui_skill_file_download": "Download",
   "com_ui_skill_file_load_error": "Failed to load file content",

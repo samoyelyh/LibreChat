@@ -117,6 +117,8 @@ export type TSkill = {
   displayTitle?: string;
   description: string;
   body: string;
+  executionOnly: boolean;
+  bodyRedacted?: boolean;
   frontmatter?: SkillFrontmatter;
   category?: string;
   /**
@@ -265,6 +267,7 @@ export type TCreateSkill = {
   displayTitle?: string;
   description: string;
   body: string;
+  executionOnly?: boolean;
   frontmatter?: Partial<SkillFrontmatter>;
   category?: string;
   /** When `true`, the skill auto-primes into every turn (mirrors always-apply frontmatter). */
@@ -277,6 +280,7 @@ export type TUpdateSkillPayload = {
   displayTitle?: string;
   description?: string;
   body?: string;
+  executionOnly?: boolean;
   frontmatter?: Partial<SkillFrontmatter>;
   category?: string;
   alwaysApply?: boolean;
