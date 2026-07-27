@@ -3,6 +3,8 @@ import copy from 'copy-to-clipboard';
 import CopyButton from '~/components/Messages/Content/CopyButton';
 import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';
+import EcommerceResult from '../Ecommerce/EcommerceResult';
+import { parseEcommerceResult } from '../Ecommerce/parseEcommerceResult';
 
 interface ContentBlock {
   type?: string;
@@ -95,6 +97,7 @@ export default function OutputRenderer({ text }: OutputRendererProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [showErrorDetails, setShowErrorDetails] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
+  const ecommerceResult = useMemo(() => parseEcommerceResult(displayText), [displayText]);
 
   const handleCopy = useCallback(() => {
     setIsCopied(true);
@@ -104,6 +107,10 @@ export default function OutputRenderer({ text }: OutputRendererProps) {
 
   if (!displayText) {
     return null;
+  }
+
+  if (ecommerceResult) {
+    return <EcommerceResult result={ecommerceResult} />;
   }
 
   const lines = displayText.split('\n');

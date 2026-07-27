@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { canUseTool, filterTools, permissionGroupForTool } from './policy.js';
+import { structureToolCallBody } from './structured-result.js';
 import { responseHeaders, type LingxingClient } from './upstream.js';
 import type { CallAudit, VerifiedActor } from './types.js';
 
@@ -210,10 +211,21 @@ export async function proxyMcp(input: {
     }
     reply.header('x-lingxing-gateway-request-id', requestId);
     const raw = await response.text();
-    const body =
+    const filteredBody =
       method === 'POST' && includesMethod(request.body, 'tools/list')
         ? filterToolsText(raw, actor, contentType)
         : raw;
+    const body =
+      toolCalls.length > 0
+        ? structureToolCallBody({
+            text: filteredBody,
+            contentType,
+            calls: toolCalls,
+            provider: 'lingxing',
+            requestId,
+            elapsedMs: Date.now() - started,
+          })
+        : filteredBody;
     if (!contentType.includes('text/event-stream')) {
       try {
         parsed = JSON.parse(body);

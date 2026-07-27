@@ -3,6 +3,7 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { canUseServer, canUseTool, filterToolsResult, permissionGroupForTool } from './policy.js';
+import { structureToolCallBody } from './structured-result.js';
 import { responseHeaders, type SellerSpriteClient } from './upstream.js';
 import type { CallAudit, VerifiedActor } from './types.js';
 
@@ -232,7 +233,18 @@ export async function proxyMcp(input: {
     const shouldFilterTools = method === 'POST' && includesMethod(request.body, 'tools/list');
     if (shouldFilterTools || calls.length > 0 || upstreamResponse.body == null) {
       const text = await upstreamResponse.text();
-      const body = shouldFilterTools ? filterToolsBody(text, actor, contentType) : text;
+      const filteredBody = shouldFilterTools ? filterToolsBody(text, actor, contentType) : text;
+      const body =
+        calls.length > 0
+          ? structureToolCallBody({
+              text: filteredBody,
+              contentType,
+              calls,
+              provider: 'sellersprite',
+              requestId,
+              elapsedMs: Date.now() - started,
+            })
+          : filteredBody;
       if (!contentType.includes('text/event-stream')) {
         try {
           responseValue = JSON.parse(body) as unknown;

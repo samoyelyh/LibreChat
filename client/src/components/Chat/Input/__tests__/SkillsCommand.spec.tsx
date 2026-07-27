@@ -135,6 +135,7 @@ const makeSkill = (overrides: Partial<TSkillSummary>): TSkillSummary => ({
   createdAt: '',
   updatedAt: '',
   ...overrides,
+  executionOnly: overrides.executionOnly ?? false,
 });
 
 const skillsResponse = {
