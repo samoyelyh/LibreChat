@@ -98,3 +98,13 @@ Phase 1 仅用于可信局域网 HTTP，`SESSION_COOKIE_SECURE=false`。取得�
 ```
 
 `status` 只显示是否配置、SHA-256 指纹后四位、更新人/时间、最近连接测试、最后调用、本月次数和套餐使用比例。`test` 只执行 MCP 初始化和工具列表，不发起业务数据查询。
+
+## Phase 6 预设 Agent
+
+```bash
+./deploy/seed-phase6-agents.sh seed
+./deploy/seed-phase6-agents.sh verify
+./deploy/verify-phase6.sh
+```
+
+`seed-phase6-agents.sh` 幂等维护“领星经营分析”“Amazon 市场分析”“跨境综合诊断”三套共享 Agent、服务端执行型 Skill、精确工具 allowlist、Deferred Tools 和 Owner/Viewer ACL。写工具保持后端禁用；`verify-phase6.sh` 会直接验证网关拒绝领星写调用。

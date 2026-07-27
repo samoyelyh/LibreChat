@@ -45,12 +45,13 @@ for _ in $(seq 1 60); do
     "$DEPLOY_DIR/seed-phase3-rbac.sh" seed >/dev/null
     "$DEPLOY_DIR/seed-phase4-rbac.sh" seed >/dev/null
     "$DEPLOY_DIR/seed-phase5-private-skills.sh" seed >/dev/null
-    printf 'Phase 5 quotas, private Skills, and shared Agents are ready.\n'
+    "$DEPLOY_DIR/seed-phase6-agents.sh" seed >/dev/null
+    printf 'Phase 6 preset Agents, tool groups, and deferred tools are ready.\n'
     exit 0
   fi
   sleep 5
 done
 
 compose ps
-printf 'Timed out waiting for Phase 4 readiness.\n' >&2
+printf 'Timed out waiting for Phase 6 readiness.\n' >&2
 exit 1
