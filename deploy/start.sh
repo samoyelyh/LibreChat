@@ -41,10 +41,11 @@ compose restart nginx >/dev/null
 
 for _ in $(seq 1 60); do
   if curl -fsS "http://127.0.0.1:${USER_PORT}/readyz" >/dev/null && curl -fsS http://127.0.0.1:3000/health >/dev/null; then
+    "$DEPLOY_DIR/provision-phase5-users.sh" >/dev/null
     "$DEPLOY_DIR/seed-phase3-rbac.sh" seed >/dev/null
     "$DEPLOY_DIR/seed-phase4-rbac.sh" seed >/dev/null
     "$DEPLOY_DIR/seed-phase5-private-skills.sh" seed >/dev/null
-    printf 'Phase 5 private Skills and shared Agents are ready.\n'
+    printf 'Phase 5 quotas, private Skills, and shared Agents are ready.\n'
     exit 0
   fi
   sleep 5

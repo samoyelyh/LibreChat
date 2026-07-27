@@ -2,7 +2,16 @@ import { SignJWT } from 'jose';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildApp, type AppServices } from '../src/app.js';
 import type { AdapterConfig } from '../src/config.js';
-import type { AiGatewayAccountMapping, CallAudit, NewApiLog, SafeMapping, TokenUsage } from '../src/types.js';
+import { AdapterError } from '../src/errors.js';
+import type {
+  AccountSummary,
+  AiGatewayAccountMapping,
+  CallAudit,
+  NewApiLog,
+  QuotaPolicy,
+  SafeMapping,
+  TokenUsage,
+} from '../src/types.js';
 import { encryptToken, fingerprintToken, hashToken } from '../src/crypto.js';
 
 const encryptionKey = '22'.repeat(32);
@@ -13,14 +22,20 @@ const config: AdapterConfig = {
   port: 4100,
   internalKey: 'internal-key-that-is-at-least-32-characters',
   encryptionKey,
+  adminToken: 'admin-token-that-is-long-enough',
   jwtSecret: 'jwt-secret-that-is-at-least-32-characters',
   mongoUri: 'mongodb://unused',
+  libreChatDatabase: 'LibreChat',
+  adapterDatabase: 'ai_quota_adapter',
   redisUrl: 'redis://unused',
   newApiBaseUrl: 'https://new-api.invalid/v1',
+  newApiAdminUserId: 1,
   requestTimeoutMs: 5000,
   requestsPerMinute: 30,
   maxConcurrentRequests: 2,
   auditRetentionDays: 90,
+  defaultUserQuota: 0,
+  defaultAllowedModels: ['kimi-k2'],
   testModel: 'kimi-k2',
   runBillableTests: false,
 };
@@ -46,6 +61,57 @@ const internalHeaders = {
   'x-librechat-user-email': mapping.librechatEmail,
 };
 
+const policy: QuotaPolicy = {
+  policyId: 'default:*',
+  name: 'Default',
+  scope: 'default',
+  scopeValue: '*',
+  priority: 0,
+  quota: 1000,
+  gatewayGroup: 'default',
+  allowedModels: ['kimi-k2'],
+  enabled: true,
+  createdAt: new Date('2026-01-01T00:00:00Z'),
+  updatedAt: new Date('2026-01-01T00:00:00Z'),
+};
+
+function accountSummary(value: AiGatewayAccountMapping): AccountSummary {
+  return {
+    identity: {
+      userId: value.librechatUserId,
+      email: value.librechatEmail,
+      name: null,
+      username: null,
+      role: 'USER',
+      departments: ['运营部'],
+      admin: false,
+    },
+    mapping: {
+      id: value.librechatUserId,
+      librechatUserId: value.librechatUserId,
+      librechatEmail: value.librechatEmail,
+      newApiUserId: value.newApiUserId,
+      newApiUsername: value.newApiUsername,
+      tokenFingerprint: value.tokenFingerprint,
+      gatewayGroup: value.gatewayGroup,
+      credentialStatus: value.credentialStatus,
+      allowedModels: value.allowedModels,
+      createdAt: value.createdAt,
+      updatedAt: value.updatedAt,
+    },
+    effectivePolicy: policy,
+    balance: {
+      totalGranted: 1000,
+      totalUsed: 10,
+      totalAvailable: 990,
+      unlimitedQuota: false,
+      expiresAt: 0,
+      unit: 'new_api_quota',
+      authoritativeSource: 'new_api',
+    },
+  };
+}
+
 describe('AI quota adapter', () => {
   let audits: CallAudit[];
   let services: AppServices;
@@ -65,9 +131,29 @@ describe('AI quota adapter', () => {
     services = {
       mappings: {
         ping: async () => undefined,
+        findByUserId: async (userId) => (userId === mapping.librechatUserId ? mapping : null),
         findActiveByUserId: async (userId) => (userId === mapping.librechatUserId ? mapping : null),
         upsert: async () => ({}) as SafeMapping,
+        setStatus: async () => undefined,
         listSafe: async () => [],
+        identity: async (userId) =>
+          userId === mapping.librechatUserId
+            ? {
+                userId,
+                email: mapping.librechatEmail,
+                name: null,
+                username: null,
+                role: 'USER',
+                departments: [],
+                admin: false,
+              }
+            : null,
+        listIdentities: async () => [],
+        ensureDefaultPolicy: async () => policy,
+        resolvePolicy: async () => policy,
+        listPolicies: async () => [policy],
+        upsertPolicy: async () => policy,
+        recordProvisioningAudit: async () => undefined,
         close: async () => undefined,
       },
       audits: { record: async (audit) => void audits.push(audit) },
@@ -106,6 +192,32 @@ describe('AI quota adapter', () => {
           },
         ],
         relay: relaySpy,
+      },
+      accounts: {
+        ensure: async (actor) => {
+          if (actor.userId !== mapping.librechatUserId) {
+            throw new Error('unexpected unmapped user');
+          }
+          return mapping;
+        },
+        summary: async (actor) => {
+          if (actor.userId !== mapping.librechatUserId) {
+            throw new AdapterError(
+              403,
+              'ai_account_not_provisioned',
+              'AI account is not provisioned',
+            );
+          }
+          return accountSummary(mapping);
+        },
+        adminUsers: async () => [],
+        listPolicies: async () => [policy],
+        upsertPolicy: async () => policy,
+        applyUserPolicy: async () => accountSummary(mapping),
+        revoke: async () => accountSummary(mapping),
+        restore: async () => accountSummary(mapping),
+        modelCatalog: async () => ['kimi-k2'],
+        gatewayGroups: async () => ['default'],
       },
     };
     app = buildApp(config, services);
@@ -160,6 +272,8 @@ describe('AI quota adapter', () => {
     };
     services.mappings.findActiveByUserId = async (userId) =>
       userId === mapping.librechatUserId ? mapping : userId === secondMapping.librechatUserId ? secondMapping : null;
+    services.accounts.ensure = async (actor) =>
+      actor.userId === mapping.librechatUserId ? mapping : secondMapping;
     const injected: string[] = [];
     relaySpy.mockImplementation(async (_path: string, _init: RequestInit, token: string) => {
       injected.push(token);

@@ -1,6 +1,12 @@
-import type { NewApiClientContract } from './contracts.js';
+import type { NewApiClientContract, NewApiProvisioningClient } from './contracts.js';
 import { AdapterError, UpstreamError } from './errors.js';
-import type { NewApiLog, TokenUsage } from './types.js';
+import type {
+  NewApiLog,
+  NewApiToken,
+  NewApiUser,
+  ProvisionedNewApiAccount,
+  TokenUsage,
+} from './types.js';
 
 export function normalizedUrl(baseUrl: string, path: string): string {
   const base = new URL(baseUrl);
@@ -15,18 +21,43 @@ function bearer(token: string): string {
   return `Bearer ${token}`;
 }
 
-export class NewApiClient implements NewApiClientContract {
+interface NewApiResponse<T> {
+  success?: boolean;
+  message?: string;
+  data?: T;
+}
+
+interface Page<T> {
+  items?: T[];
+  total?: number;
+}
+
+function fullRuntimeToken(value: string): string {
+  return value.startsWith('sk-') ? value : `sk-${value}`;
+}
+
+export class NewApiClient implements NewApiClientContract, NewApiProvisioningClient {
   constructor(
     private readonly baseUrl: string,
     private readonly timeoutMs: number,
+    private readonly adminToken?: string,
+    private readonly adminUserId?: number,
   ) {}
 
-  private async jsonRequest<T>(path: string, token?: string, signal?: AbortSignal): Promise<T> {
+  private async rawRequest(
+    path: string,
+    init: RequestInit,
+    signal?: AbortSignal,
+  ): Promise<Response> {
     const timeout = AbortSignal.timeout(this.timeoutMs);
     const combined = signal ? AbortSignal.any([signal, timeout]) : timeout;
+    return fetch(normalizedUrl(this.baseUrl, path), { ...init, signal: combined });
+  }
+
+  private async jsonRequest<T>(path: string, token?: string, signal?: AbortSignal): Promise<T> {
     const headers: Record<string, string> = { Accept: 'application/json' };
     if (token) headers.Authorization = bearer(token);
-    const response = await fetch(normalizedUrl(this.baseUrl, path), { headers, signal: combined });
+    const response = await this.rawRequest(path, { headers }, signal);
     const bytes = new Uint8Array(await response.arrayBuffer());
     if (!response.ok) {
       throw new UpstreamError(
@@ -42,6 +73,291 @@ export class NewApiClient implements NewApiClientContract {
     } catch {
       throw new AdapterError(502, 'invalid_new_api_response', 'New API returned invalid JSON');
     }
+  }
+
+  private adminHeaders(): Record<string, string> {
+    if (!this.adminToken || !this.adminUserId) {
+      throw new AdapterError(
+        503,
+        'new_api_admin_unavailable',
+        'New API administrator credential is unavailable',
+      );
+    }
+    return {
+      Accept: 'application/json',
+      Authorization: bearer(this.adminToken),
+      'Content-Type': 'application/json',
+      'New-Api-User': String(this.adminUserId),
+    };
+  }
+
+  private async managementRequest<T>(
+    path: string,
+    options: {
+      method?: string;
+      body?: object;
+      accessToken?: string;
+      userId?: number;
+      cookie?: string;
+    } = {},
+  ): Promise<T> {
+    const headers = options.accessToken
+      ? {
+          Accept: 'application/json',
+          Authorization: bearer(options.accessToken),
+          'Content-Type': 'application/json',
+          'New-Api-User': String(options.userId),
+        }
+      : options.cookie
+        ? {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+            Cookie: options.cookie,
+            'New-Api-User': String(options.userId),
+          }
+        : this.adminHeaders();
+    const response = await this.rawRequest(path, {
+      method: options.method ?? 'GET',
+      headers,
+      ...(options.body ? { body: JSON.stringify(options.body) } : {}),
+    });
+    const payload = (await response.json().catch(() => null)) as NewApiResponse<T> | null;
+    if (!response.ok || !payload || payload.success === false) {
+      throw new AdapterError(
+        502,
+        'new_api_management_failed',
+        `New API management request failed with HTTP ${response.status}`,
+      );
+    }
+    if (payload.data === undefined) {
+      return undefined as T;
+    }
+    return payload.data;
+  }
+
+  private async findUser(username: string): Promise<NewApiUser | null> {
+    const data = await this.managementRequest<Page<NewApiUser>>(
+      `/api/user/search?keyword=${encodeURIComponent(username)}&p=0&page_size=50`,
+    );
+    return data.items?.find((user) => user.username === username) ?? null;
+  }
+
+  private async login(username: string, password: string): Promise<{ userId: number; cookie: string }> {
+    const response = await this.rawRequest('/api/user/login', {
+      method: 'POST',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    const payload = (await response.json().catch(() => null)) as
+      | NewApiResponse<{ id?: number; require_2fa?: boolean }>
+      | null;
+    const setCookie = response.headers.get('set-cookie') ?? '';
+    const session = setCookie.match(/(?:^|,\s*)([^=;,]+=[^;]+)/)?.[1] ?? '';
+    const userId = payload?.data?.id;
+    if (!response.ok || payload?.success !== true || !userId || !session || payload.data?.require_2fa) {
+      throw new AdapterError(
+        502,
+        'new_api_user_login_failed',
+        'New API managed user login failed',
+      );
+    }
+    return { userId, cookie: session };
+  }
+
+  private async tokens(accessToken: string, userId: number): Promise<NewApiToken[]> {
+    const data = await this.managementRequest<Page<NewApiToken>>('/api/token/?p=0&page_size=100', {
+      accessToken,
+      userId,
+    });
+    return data.items ?? [];
+  }
+
+  private async setUserGroup(user: NewApiUser, group: string): Promise<void> {
+    await this.managementRequest<void>('/api/user/', {
+      method: 'PUT',
+      body: {
+        id: user.id,
+        username: user.username,
+        display_name: user.display_name ?? user.username,
+        role: user.role,
+        group,
+        remark: 'Managed by Woda LibreChat AI quota adapter',
+      },
+    });
+    user.group = group;
+  }
+
+  private async setUserQuota(userId: number, quota: number): Promise<void> {
+    await this.managementRequest<void>('/api/user/manage', {
+      method: 'POST',
+      body: { id: userId, action: 'add_quota', mode: 'override', value: quota },
+    });
+  }
+
+  private async applyTokenPolicy(
+    token: NewApiToken,
+    accessToken: string,
+    userId: number,
+    quota: number,
+    group: string,
+    allowedModels: string[],
+  ): Promise<void> {
+    await this.managementRequest<NewApiToken>('/api/token/', {
+      method: 'PUT',
+      accessToken,
+      userId,
+      body: {
+        id: token.id,
+        name: token.name,
+        expired_time: -1,
+        remain_quota: quota,
+        unlimited_quota: false,
+        model_limits_enabled: true,
+        model_limits: [...new Set(allowedModels)].sort().join(','),
+        allow_ips: '',
+        group,
+        cross_group_retry: false,
+      },
+    });
+    if (quota > 0 && token.status !== 1) {
+      await this.managementRequest<NewApiToken>('/api/token/?status_only=1', {
+        method: 'PUT',
+        accessToken,
+        userId,
+        body: { id: token.id, status: 1 },
+      });
+    }
+  }
+
+  async provision(input: {
+    username: string;
+    displayName: string;
+    password: string;
+    quota: number;
+    group: string;
+    allowedModels: string[];
+    tokenName: string;
+  }): Promise<ProvisionedNewApiAccount> {
+    let user = await this.findUser(input.username);
+    if (!user) {
+      await this.managementRequest<void>('/api/user/', {
+        method: 'POST',
+        body: {
+          username: input.username,
+          password: input.password,
+          display_name: input.displayName,
+          role: 1,
+        },
+      });
+      user = await this.findUser(input.username);
+    }
+    if (!user) {
+      throw new AdapterError(
+        502,
+        'new_api_user_create_failed',
+        'New API user could not be created',
+      );
+    }
+    await this.setUserGroup(user, input.group);
+    await this.setUserQuota(user.id, input.quota);
+    const login = await this.login(input.username, input.password);
+    const managementToken = await this.managementRequest<string>('/api/user/token', {
+      cookie: login.cookie,
+      userId: login.userId,
+    });
+    let tokens = await this.tokens(managementToken, user.id);
+    let token = tokens.find((candidate) => candidate.name === input.tokenName);
+    if (!token) {
+      await this.managementRequest<void>('/api/token/', {
+        method: 'POST',
+        accessToken: managementToken,
+        userId: user.id,
+        body: {
+          name: input.tokenName,
+          expired_time: -1,
+          remain_quota: input.quota,
+          unlimited_quota: false,
+          model_limits_enabled: true,
+          model_limits: [...new Set(input.allowedModels)].sort().join(','),
+          allow_ips: '',
+          group: input.group,
+          cross_group_retry: false,
+        },
+      });
+      tokens = await this.tokens(managementToken, user.id);
+      token = tokens.find((candidate) => candidate.name === input.tokenName);
+    }
+    if (!token) {
+      throw new AdapterError(
+        502,
+        'new_api_token_create_failed',
+        'New API token could not be created',
+      );
+    }
+    await this.applyTokenPolicy(
+      token,
+      managementToken,
+      user.id,
+      input.quota,
+      input.group,
+      input.allowedModels,
+    );
+    const key = await this.managementRequest<{ key?: string }>(`/api/token/${token.id}/key`, {
+      method: 'POST',
+      accessToken: managementToken,
+      userId: user.id,
+    });
+    if (!key.key) {
+      throw new AdapterError(
+        502,
+        'new_api_token_key_missing',
+        'New API token key was not returned',
+      );
+    }
+    return {
+      user,
+      token,
+      runtimeToken: fullRuntimeToken(key.key),
+      managementToken,
+    };
+  }
+
+  async applyPolicy(input: {
+    user: NewApiUser;
+    token: NewApiToken;
+    managementToken: string;
+    quota: number;
+    group: string;
+    allowedModels: string[];
+  }): Promise<void> {
+    await this.setUserGroup(input.user, input.group);
+    await this.setUserQuota(input.user.id, input.quota);
+    await this.applyTokenPolicy(
+      input.token,
+      input.managementToken,
+      input.user.id,
+      input.quota,
+      input.group,
+      input.allowedModels,
+    );
+  }
+
+  async disableUser(userId: number): Promise<void> {
+    await this.managementRequest<void>('/api/user/manage', {
+      method: 'POST',
+      body: { id: userId, action: 'disable', mode: '', value: 0 },
+    });
+  }
+
+  async restoreUser(userId: number): Promise<void> {
+    await this.managementRequest<void>('/api/user/manage', {
+      method: 'POST',
+      body: { id: userId, action: 'enable', mode: '', value: 0 },
+    });
+  }
+
+  async groups(): Promise<string[]> {
+    return this.managementRequest<string[]>('/api/group/');
   }
 
   async status(): Promise<Record<string, unknown>> {

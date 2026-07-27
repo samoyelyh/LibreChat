@@ -9,11 +9,14 @@ const password = process.env.AI_ADAPTER_DB_PASSWORD;
 if (!username || !password) throw new Error('Adapter MongoDB credentials are required');
 
 const adapterDb = db.getSiblingDB(databaseName);
-const role = { role: 'readWrite', db: databaseName };
+const roles = [
+  { role: 'readWrite', db: databaseName },
+  { role: 'read', db: 'LibreChat' },
+];
 const existing = adapterDb.getUser(username);
 if (existing) {
-  adapterDb.updateUser(username, { pwd: password, roles: [role] });
+  adapterDb.updateUser(username, { pwd: password, roles });
 } else {
-  adapterDb.createUser({ user: username, pwd: password, roles: [role] });
+  adapterDb.createUser({ user: username, pwd: password, roles });
 }
 print('AI_ADAPTER_MONGO_USER_OK');

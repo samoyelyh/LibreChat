@@ -38,6 +38,7 @@ import Avatar from '../SettingsTabs/Account/Avatar';
 import LingxingDataSource from '../SettingsTabs/DataSources/LingxingDataSource';
 import About from '../SettingsTabs/About/About';
 import ApiKeys from '../SettingsTabs/ApiKeys';
+import AiQuota from '../SettingsTabs/Billing/AiQuota';
 import MemoryToggle from './MemoryToggle';
 import { TTSEndpoints } from '~/common';
 import store from '~/store';
@@ -542,6 +543,14 @@ export const registry: SettingEntry[] = [
     Component: LingxingDataSource,
   },
   // Account · Billing
+  {
+    id: 'aiQuota',
+    tab: ACCOUNT,
+    section: 'billing',
+    labelKey: 'com_ui_settings_label_ai_quota',
+    keywords: ['quota', 'models', 'credits', 'new api'],
+    Component: AiQuota,
+  },
   {
     id: 'tokenCredits',
     tab: ACCOUNT,

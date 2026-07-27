@@ -15,6 +15,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "mapping:upsert": "tsx src/cli/upsert-mapping.ts",
     "mapping:status": "tsx src/cli/mapping-status.ts",
+    "accounts:provision": "tsx src/cli/provision-users.ts",
     "verify:live": "tsx src/cli/verify-live.ts"
   },
   "dependencies": {

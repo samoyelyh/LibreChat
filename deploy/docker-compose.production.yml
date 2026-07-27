@@ -66,6 +66,8 @@ services:
       HOST: 0.0.0.0
       PORT: 3080
       NODE_ENV: production
+      AI_GATEWAY_ADMIN_TOKEN: ''
+      AI_TOKEN_ENCRYPTION_KEY: ''
       MONGO_URI: mongodb://${MONGO_ROOT_USERNAME}:${MONGO_ROOT_PASSWORD}@mongodb:27017/LibreChat?authSource=admin
       CUSTOM_FOOTER: ${CUSTOM_FOOTER:-}
       MEILI_HOST: http://meilisearch:7700
@@ -85,6 +87,7 @@ services:
       - ./verify-phase4-actors.js:/app/deploy/verify-phase4-actors.js:ro
       - ./seed-phase5-private-skills.js:/app/deploy/seed-phase5-private-skills.js:ro
       - ./verify-phase5-api.js:/app/deploy/verify-phase5-api.js:ro
+      - ./verify-phase5-quota-api.js:/app/deploy/verify-phase5-quota-api.js:ro
       - uploads:/app/uploads
       - api_logs:/app/api/logs
     networks:
@@ -198,14 +201,20 @@ services:
       AI_ADAPTER_PORT: ${AI_ADAPTER_PORT:-4100}
       AI_ADAPTER_INTERNAL_KEY: ${AI_ADAPTER_INTERNAL_KEY}
       AI_TOKEN_ENCRYPTION_KEY: ${AI_TOKEN_ENCRYPTION_KEY}
+      AI_GATEWAY_ADMIN_TOKEN: ${AI_GATEWAY_ADMIN_TOKEN}
       JWT_SECRET: ${JWT_SECRET}
       MONGO_URI: mongodb://${AI_ADAPTER_DB_USERNAME}:${AI_ADAPTER_DB_PASSWORD}@mongodb:27017/${AI_ADAPTER_DB_NAME:-ai_quota_adapter}?authSource=${AI_ADAPTER_DB_NAME:-ai_quota_adapter}
+      AI_ADAPTER_LIBRECHAT_DB: LibreChat
+      AI_ADAPTER_DB_NAME: ${AI_ADAPTER_DB_NAME:-ai_quota_adapter}
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
       NEW_API_BASE_URL: ${NEW_API_BASE_URL:-https://api.aso8ty.com/v1}
+      NEW_API_ADMIN_USER_ID: ${NEW_API_ADMIN_USER_ID}
       NEW_API_REQUEST_TIMEOUT_MS: ${NEW_API_REQUEST_TIMEOUT_MS:-120000}
       AI_ADAPTER_REQUESTS_PER_MINUTE: ${AI_ADAPTER_REQUESTS_PER_MINUTE:-30}
       AI_ADAPTER_MAX_CONCURRENT_REQUESTS: ${AI_ADAPTER_MAX_CONCURRENT_REQUESTS:-2}
       AI_ADAPTER_AUDIT_RETENTION_DAYS: ${AI_ADAPTER_AUDIT_RETENTION_DAYS:-90}
+      AI_DEFAULT_USER_QUOTA: ${AI_DEFAULT_USER_QUOTA:-0}
+      AI_DEFAULT_ALLOWED_MODELS: ${AI_DEFAULT_ALLOWED_MODELS:-kimi-k2}
       AI_ADAPTER_TEST_MODEL: ${AI_ADAPTER_TEST_MODEL:-kimi-k2}
       RUN_BILLABLE_PHASE2_TESTS: ${RUN_BILLABLE_PHASE2_TESTS:-false}
       NO_PROXY: localhost,127.0.0.1,::1,mongodb,redis

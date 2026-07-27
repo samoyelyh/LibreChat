@@ -6,7 +6,7 @@ require_runtime
 
 context="$ROOT_DIR/services/ai-quota-adapter"
 require_file "$context/Dockerfile"
-tag="woda/ai-quota-adapter:phase2"
+tag="woda/ai-quota-adapter:phase5-quota"
 docker build --pull=false --tag "$tag" "$context"
 image_id=$(docker image inspect --format '{{.Id}}' "$tag")
 [[ "$image_id" =~ ^sha256:[0-9a-f]{64}$ ]] || {
