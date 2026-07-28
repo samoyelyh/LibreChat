@@ -272,6 +272,7 @@ services:
     networks:
       - backend
       - mcp
+      - sellersprite_egress
     cap_drop:
       - ALL
     pids_limit: 256
@@ -316,6 +317,7 @@ services:
     networks:
       - backend
       - mcp
+      - lingxing_egress
     cap_drop:
       - ALL
     pids_limit: 256
@@ -413,6 +415,8 @@ networks:
     internal: true
   mcp:
     internal: true
+  sellersprite_egress:
+  lingxing_egress:
 
 volumes:
   mongodb_data:

@@ -10,7 +10,7 @@ Phase 8 在 Phase 7 的结构化展示基础上完成生产安全收口：
 - 三个服务使用 MongoDB 唯一随机数集合阻断重放，随机数按 TTL 自动清理；
 - 两个 MCP 网关使用 MongoDB 分钟桶实现按用户、按 Tool 的跨实例限流；
 - 无签名、错误签名、过期签名和重放请求写入独立安全审计集合，不记录 Header、正文或密钥；
-- MCP 网关移出 `edge` 网络，只连接独立内部 `mcp` 网络与数据库 `backend` 网络；
+- MCP 网关移出共享 `edge` 网络，入站只通过内部 `mcp` 网络，并分别使用互相隔离且不发布宿主机端口的专用出站网络访问官方上游；
 - 备份拆分为 `config/`、`data/`、`secrets/`，秘密目录保持 `0700`，环境文件保持 `0600`；
 - 备份完成后自动验证 SHA-256、MongoDB gzip 归档和必要配置，回滚前再次验证；
 - 增加完整的 Phase 8 生产验收脚本，覆盖签名、防重放、限流、审计、隔离、备份、健康和端口暴露。
@@ -96,7 +96,7 @@ AI Adapter 数据库新增：
 
 - 新增内部网络 `mcp`；
 - LibreChat API 同时加入 `mcp`；
-- 两个 MCP 网关从 `edge` 移除，只加入 `mcp` 与 `backend`；
+- 两个 MCP 网关从 `edge` 移除，保留内部 `mcp` 与 `backend`，并分别加入 `sellersprite_egress`、`lingxing_egress` 专用出站网络；
 - 两个网关增加 `cap_drop: ALL` 和 `pids_limit: 256`；
 - 三个服务注入签名时钟容差与 MCP 限流配置；
 - 仅 Nginx 保持发布 `7999` 和 `3000`。
@@ -170,6 +170,14 @@ Phase 8 图片持久化热修复（2026-07-28）：
 - 热修复后 `deploy/verify-phase8.sh` 再次返回 `PHASE8_VERIFY_OK`，全部 11 个服务健康；
 - 旧图片目录在修复前已经为空，丢失的处理后图片无法从该目录恢复；受影响对话需要新建对话并重新上传附件。
 
+Phase 8 MCP 出站网络热修复（2026-07-28）：
+
+- 根因：`backend` 与 `mcp` 均设置为 `internal: true`，两个 MCP 网关从 `edge` 移除后没有任何外部默认路由，导致官方上游请求在 5 秒后失败并返回 502；
+- SellerSprite 与 LingXing 分别增加独立出站网络；两个网关仍无 Host Publish，不能从局域网直接访问 4200/4300，也不共享彼此的出站网络；
+- 重建网关并重启 API 清除熔断状态后，只读 `initialize` 与 `tools/list` 成功：SellerSprite 44 个 Tool、LingXing 23 个 Tool、暴露写工具 0；
+- 完成态备份：`/opt/cross-border-ai/deploy/backups/20260728T082700Z`；
+- 完整 Phase 8 验收再次返回 `PHASE8_VERIFY_OK`，专用出站网络、内部入站、签名、防重放、限流、备份、端口和日志检查全部通过。
+
 ## 14. 手工验证步骤
 
 1. 登录 `http://192.168.0.27:7999`；
@@ -199,7 +207,7 @@ Phase 8 图片持久化热修复（2026-07-28）：
 - 签名要求 LibreChat 沃达补丁，后续升级 MCP 传输和 OpenAI Client 时必须重跑签名契约测试；
 - MongoDB TTL 清理不是实时任务，过期记录可能在后台清理周期内短暂保留，但不会再次通过时间窗口校验；
 - 备份验证确认完整性和归档可读性；数据库恢复仍必须由管理员显式指定 `--restore-db`。
-- 2026-07-28 最终复核时，SellerSprite 已配置且保留最近 44 个 Tool 的成功目录记录，但当前外部上游连接测试返回 `connection failed`。请求已通过沃达网关签名与权限校验，失败发生在外部连接阶段；平台容器与 Phase 8 安全发布门槛不受影响，真实 SellerSprite 调用在上游恢复前处于降级状态。
+- 2026-07-28 曾因 MCP 网关仅连接 Docker `internal` 网络而无法访问官方上游；现已通过两个互相隔离的专用出站网络修复，SellerSprite 与 LingXing 初始化均恢复。该项不再处于降级状态。
 
 ## 17. 未完成内容
 

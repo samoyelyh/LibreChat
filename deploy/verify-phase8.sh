@@ -30,12 +30,20 @@ all_healthy() {
 }
 
 mcp_network_isolated() {
-  local seller lingxing
+  local seller lingxing seller_networks lingxing_networks
   seller=$(compose ps -q sellersprite-mcp-gateway)
   lingxing=$(compose ps -q lingxing-mcp-gateway)
   [[ "$(docker network inspect woda-cross-border-ai_mcp --format '{{.Internal}}')" == true ]]
-  ! docker inspect "$seller" --format '{{json .NetworkSettings.Networks}}' | grep -q '"woda-cross-border-ai_edge"'
-  ! docker inspect "$lingxing" --format '{{json .NetworkSettings.Networks}}' | grep -q '"woda-cross-border-ai_edge"'
+  [[ "$(docker network inspect woda-cross-border-ai_sellersprite_egress --format '{{.Internal}}')" == false ]]
+  [[ "$(docker network inspect woda-cross-border-ai_lingxing_egress --format '{{.Internal}}')" == false ]]
+  seller_networks=$(docker inspect "$seller" --format '{{json .NetworkSettings.Networks}}')
+  lingxing_networks=$(docker inspect "$lingxing" --format '{{json .NetworkSettings.Networks}}')
+  ! grep -q '"woda-cross-border-ai_edge"' <<<"$seller_networks"
+  ! grep -q '"woda-cross-border-ai_edge"' <<<"$lingxing_networks"
+  grep -q '"woda-cross-border-ai_sellersprite_egress"' <<<"$seller_networks"
+  ! grep -q '"woda-cross-border-ai_lingxing_egress"' <<<"$seller_networks"
+  grep -q '"woda-cross-border-ai_lingxing_egress"' <<<"$lingxing_networks"
+  ! grep -q '"woda-cross-border-ai_sellersprite_egress"' <<<"$lingxing_networks"
 }
 
 librechat_file_storage_persistent() {
@@ -79,7 +87,7 @@ if (!decision || decision.allowed || decision.limit !== limit || decision.remain
 
 check 'compose configuration' compose config --quiet
 check 'all containers healthy' all_healthy
-check 'MCP network is internal and gateways are not on edge' mcp_network_isolated
+check 'MCP ingress is internal and each gateway has isolated outbound access' mcp_network_isolated
 check 'LibreChat uploads and processed images use persistent volumes' librechat_file_storage_persistent
 check 'signed request, replay, stale request, and audit controls' bash -lc \
   "cd \"$DEPLOY_DIR\" && docker compose --env-file .env -f docker-compose.production.yml exec -T api node /app/deploy/verify-phase8-security.js | grep -q PHASE8_SECURITY_OK"
