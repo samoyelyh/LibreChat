@@ -23,7 +23,7 @@ LibreChat 上游基线仍固定为 `v0.8.7`。
 
 ## 3. 当前 Commit SHA
 
-上游 LibreChat 基线仍为 `9e74cc0e57b395926122bd4062c1fcedc48ed465`。Phase 8 实施提交号在代码提交后记录。
+上游 LibreChat 基线仍为 `9e74cc0e57b395926122bd4062c1fcedc48ed465`。Phase 8 实施提交为 `1c7477e`。
 
 ## 4. 修改文件
 

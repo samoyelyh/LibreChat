@@ -87,7 +87,7 @@ Phase 2 没有实现 Phase 5 的自动 New API 用户开通、部门预算、额
 
 ## Phase 8 安全与生产收口（2026-07-28）
 
-- 分支：`woda/phase-8`；LibreChat 上游基线保持 `v0.8.7` / `9e74cc0e57b395926122bd4062c1fcedc48ed465`。
+- 分支：`woda/phase-8`；实施提交：`1c7477e`；LibreChat 上游基线保持 `v0.8.7` / `9e74cc0e57b395926122bd4062c1fcedc48ed465`。
 - LibreChat 到 AI Adapter、SellerSprite 与 LingXing 网关的内部请求已改为 HMAC-SHA256 动态签名；静态内部密钥不再随请求发送。
 - 三个服务使用 MongoDB 唯一随机数与 TTL 防重放；两个 MCP 网关增加按用户、按 Tool 的 MongoDB 分布式分钟限流。
 - MCP 网关已移出 `edge`，只连接内部 `mcp` 与 `backend` 网络；宿主机仍只发布用户入口 `7999` 和管理入口 `3000`。
