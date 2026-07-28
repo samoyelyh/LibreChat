@@ -97,6 +97,8 @@ Phase 2 没有实现 Phase 5 的自动 New API 用户开通、部门预算、额
 - 验收没有发送付费模型请求、没有执行真实 MCP 业务读取或写入，领星写工具继续关闭。
 - SellerSprite 外部上游在最终复核时返回 `connection failed`；网关配置与最近 44 个 Tool 目录记录仍在，平台内部安全链路通过，真实 SellerSprite 调用暂时处于外部依赖降级状态。
 - HTTPS 继续等待内部域名/证书或公司 CA；SSO 继续等待 OIDC/SAML 身份提供方参数。
+- 2026-07-28 图片持久化热修复：确认生产 Compose 遗漏 `/app/client/public/images` 持久卷，API 重建后附件读取出现 `ENOENT` 并导致后续消息 HTTP 409。现已新增 `images` 命名卷，备份同时归档 uploads/images，回滚增加显式 `--restore-files`。强制重建 API 后文件保留测试返回 `FILE_PERSISTENCE_OK`，Phase 8 全量回归再次通过。
+- 热修复前保护性备份：`/opt/cross-border-ai/deploy/backups/20260728T081050Z`；热修复完成态备份：`/opt/cross-border-ai/deploy/backups/20260728T081359Z`。旧图片目录在修复前已为空，受影响的旧附件需要用户重新上传。
 
 ## Phase 5 私有 Skill 与共享 Agent 实施记录（2026-07-24）
 

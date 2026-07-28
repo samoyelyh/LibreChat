@@ -50,6 +50,7 @@ LibreChat 上游基线仍固定为 `v0.8.7`。
 - `deploy/verify-phase8.sh`
 - `deploy/verify-backup.sh`
 - `deploy/verify-log-secrets.sh`
+- `deploy/verify-file-persistence.sh`
 - `deploy/upgrade-phase8-env.sh`
 - 本文档
 
@@ -157,6 +158,18 @@ Phase 8 不可变镜像 ID：
 | SellerSprite Gateway | `sha256:093f5ac4aaaee074d2ff056ae456eb7b64761cbc4a50651e46bdddd4101e476b` |
 | LingXing Gateway | `sha256:0e76c8d05796a97ada9ea8010368cdba7ad8da0c94d6f81ea4ab534c5eada94b` |
 
+Phase 8 图片持久化热修复（2026-07-28）：
+
+- 根因：生产 Compose 只持久化 `/app/uploads`，遗漏 LibreChat 本地处理图片目录 `/app/client/public/images`；API 容器重建后旧图片丢失，Agent 读取附件触发 `ENOENT`，浏览器随后以未落库的临时回复作为父消息而收到 HTTP 409；
+- 新增命名卷 `images` 挂载到 `/app/client/public/images`，原 `uploads` 卷保持不变；
+- 备份新增 `data/librechat-files.tar.gz`，同时保存原始 uploads 与处理后 images，并纳入 SHA-256、gzip 和归档路径白名单验证；
+- 回滚新增显式 `--restore-files` 参数。默认回滚仍不修改文件卷，也不自动删除命名卷；
+- `deploy/verify-file-persistence.sh` 写入无业务数据的测试标记，强制重建 API 后成功读取并清理，返回 `FILE_PERSISTENCE_OK`；
+- 热修复前保护性备份：`/opt/cross-border-ai/deploy/backups/20260728T081050Z`；
+- 热修复完成态备份：`/opt/cross-border-ai/deploy/backups/20260728T081359Z`；
+- 热修复后 `deploy/verify-phase8.sh` 再次返回 `PHASE8_VERIFY_OK`，全部 11 个服务健康；
+- 旧图片目录在修复前已经为空，丢失的处理后图片无法从该目录恢复；受影响对话需要新建对话并重新上传附件。
+
 ## 14. 手工验证步骤
 
 1. 登录 `http://192.168.0.27:7999`；
@@ -208,7 +221,13 @@ deploy/rollback.sh /opt/cross-border-ai/deploy/backups/<Phase-8-部署前备份>
 deploy/rollback.sh /opt/cross-border-ai/deploy/backups/<备份目录> --restore-db
 ```
 
-回滚脚本在恢复前验证备份完整性。
+仅恢复本地上传文件和处理后图片：
+
+```bash
+deploy/rollback.sh /opt/cross-border-ai/deploy/backups/<备份目录> --restore-files
+```
+
+需要同时恢复数据库与文件时可同时指定两个参数。回滚脚本在恢复前验证备份完整性。
 
 ## 19. 与上游 LibreChat 的升级冲突
 

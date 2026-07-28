@@ -94,6 +94,7 @@ services:
       - ./verify-phase8-security.js:/app/deploy/verify-phase8-security.js:ro
       - ./verify-phase5-api.js:/app/deploy/verify-phase5-api.js:ro
       - ./verify-phase5-quota-api.js:/app/deploy/verify-phase5-quota-api.js:ro
+      - images:/app/client/public/images
       - uploads:/app/uploads
       - api_logs:/app/api/logs
     networks:
@@ -417,6 +418,7 @@ volumes:
   mongodb_data:
   meili_data:
   postgres_data:
+  images:
   uploads:
   api_logs:
   redis_data:

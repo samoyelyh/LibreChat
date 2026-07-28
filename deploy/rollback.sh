@@ -5,11 +5,27 @@ source "$(dirname "$0")/common.sh"
 require_runtime
 
 backup_dir=${1:-}
-restore_db=${2:-}
 [[ -d "$backup_dir" ]] || {
-  printf 'Usage: %s <backup-directory> [--restore-db]\n' "$0" >&2
+  printf 'Usage: %s <backup-directory> [--restore-db] [--restore-files]\n' "$0" >&2
   exit 2
 }
+
+restore_db=false
+restore_files=false
+for option in "${@:2}"; do
+  case "$option" in
+    --restore-db)
+      restore_db=true
+      ;;
+    --restore-files)
+      restore_files=true
+      ;;
+    *)
+      printf 'Unknown rollback option: %s\n' "$option" >&2
+      exit 2
+      ;;
+  esac
+done
 
 "$DEPLOY_DIR/verify-backup.sh" "$backup_dir"
 
@@ -39,7 +55,7 @@ fi
 compose config --quiet
 compose up -d --remove-orphans
 
-if [[ "$restore_db" == '--restore-db' ]]; then
+if [[ "$restore_db" == true ]]; then
   mongodb_backup=$(backup_path data/mongodb.archive.gz mongodb.archive.gz)
   [[ -f "$mongodb_backup" ]] || {
     printf 'MongoDB backup is missing.\n' >&2
@@ -67,6 +83,22 @@ if [[ "$restore_db" == '--restore-db' ]]; then
     compose exec -T mongodb sh -lc 'mongorestore --quiet --drop --authenticationDatabase admin --username "$MONGO_INITDB_ROOT_USERNAME" --password "$MONGO_INITDB_ROOT_PASSWORD" --archive=/tmp/lingxing-mongodb.archive.gz --gzip'
     compose exec -T mongodb rm -f /tmp/lingxing-mongodb.archive.gz
   fi
+fi
+
+if [[ "$restore_files" == true ]]; then
+  files_backup="$backup_dir/data/librechat-files.tar.gz"
+  [[ -f "$files_backup" ]] || {
+    printf 'LibreChat file backup is missing.\n' >&2
+    exit 1
+  }
+  api_container=$(compose ps -q api)
+  [[ -n "$api_container" ]] || {
+    printf 'LibreChat API container is not running.\n' >&2
+    exit 1
+  }
+  docker cp "$files_backup" "$api_container:/tmp/librechat-files.tar.gz"
+  compose exec -T api sh -lc \
+    'tar -xzf /tmp/librechat-files.tar.gz -C /app && rm -f /tmp/librechat-files.tar.gz'
 fi
 
 printf 'Rollback applied. Named volumes were not deleted.\n'

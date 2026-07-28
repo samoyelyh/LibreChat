@@ -38,6 +38,14 @@ mcp_network_isolated() {
   ! docker inspect "$lingxing" --format '{{json .NetworkSettings.Networks}}' | grep -q '"woda-cross-border-ai_edge"'
 }
 
+librechat_file_storage_persistent() {
+  local api_container mounts
+  api_container=$(compose ps -q api)
+  mounts=$(docker inspect --format '{{range .Mounts}}{{println .Destination .Type}}{{end}}' "$api_container")
+  grep -qx '/app/client/public/images volume' <<<"$mounts"
+  grep -qx '/app/uploads volume' <<<"$mounts"
+}
+
 approved_ports_only() {
   local actual expected
   actual=$(
@@ -72,6 +80,7 @@ if (!decision || decision.allowed || decision.limit !== limit || decision.remain
 check 'compose configuration' compose config --quiet
 check 'all containers healthy' all_healthy
 check 'MCP network is internal and gateways are not on edge' mcp_network_isolated
+check 'LibreChat uploads and processed images use persistent volumes' librechat_file_storage_persistent
 check 'signed request, replay, stale request, and audit controls' bash -lc \
   "cd \"$DEPLOY_DIR\" && docker compose --env-file .env -f docker-compose.production.yml exec -T api node /app/deploy/verify-phase8-security.js | grep -q PHASE8_SECURITY_OK"
 check 'conversation ownership isolation' bash -lc \

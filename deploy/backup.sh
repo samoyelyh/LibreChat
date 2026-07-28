@@ -61,6 +61,13 @@ compose exec -T mongodb sh -lc 'mongodump --quiet --authenticationDatabase admin
 docker cp "$mongo_container:/tmp/lingxing-mongodb.archive.gz" "$data_dir/lingxing-mongodb.archive.gz"
 compose exec -T mongodb rm -f /tmp/lingxing-mongodb.archive.gz
 
+# Local file storage is separate from MongoDB. Preserve both the original
+# uploads and LibreChat's processed image files without exposing filenames in
+# command output.
+compose exec -T api sh -lc \
+  'tar -czf - -C /app uploads client/public/images' \
+  >"$data_dir/librechat-files.tar.gz"
+
 (
   cd "$backup_dir"
   find config data secrets -type f -print0 \

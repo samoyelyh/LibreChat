@@ -30,6 +30,21 @@ for name in mongodb ai-adapter-mongodb sellersprite-mongodb lingxing-mongodb; do
   [[ ! -f "$archive" ]] || gzip -t "$archive"
 done
 
+files_archive="$backup_dir/data/librechat-files.tar.gz"
+if [[ -f "$files_archive" ]]; then
+  gzip -t "$files_archive"
+  while IFS= read -r entry; do
+    case "$entry" in
+      uploads | uploads/ | uploads/* | client/public/images | client/public/images/ | client/public/images/*)
+        ;;
+      *)
+        printf 'Unexpected path in LibreChat file archive.\n' >&2
+        exit 1
+        ;;
+    esac
+  done < <(tar -tzf "$files_archive")
+fi
+
 compose_backup="$backup_dir/config/docker-compose.production.yml"
 [[ -f "$compose_backup" ]] || compose_backup="$backup_dir/docker-compose.production.yml"
 librechat_backup="$backup_dir/config/librechat.yaml"
@@ -38,5 +53,9 @@ librechat_backup="$backup_dir/config/librechat.yaml"
   printf 'Required configuration backup is incomplete.\n' >&2
   exit 1
 }
+if grep -q '/app/client/public/images' "$compose_backup" && [[ ! -f "$files_archive" ]]; then
+  printf 'LibreChat file archive is required by this backup configuration.\n' >&2
+  exit 1
+fi
 
 printf 'BACKUP_VERIFY_OK directory=%s\n' "$backup_dir"
