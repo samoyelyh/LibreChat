@@ -91,7 +91,7 @@ Phase 2 没有实现 Phase 5 的自动 New API 用户开通、部门预算、额
 - LibreChat 到 AI Adapter、SellerSprite 与 LingXing 网关的内部请求已改为 HMAC-SHA256 动态签名；静态内部密钥不再随请求发送。
 - 三个服务使用 MongoDB 唯一随机数与 TTL 防重放；两个 MCP 网关增加按用户、按 Tool 的 MongoDB 分布式分钟限流。
 - MCP 网关已移出共享 `edge`，入站连接内部 `mcp` 与 `backend` 网络；SellerSprite、LingXing 分别使用互相隔离的专用出站网络访问官方上游，宿主机仍只发布用户入口 `7999` 和管理入口 `3000`。
-- Phase 8 四个镜像 ID 分别为 LibreChat `sha256:8cb0021533bc46c7dc16ec89beecf56e67114665203143f69413959193fd1500`、Adapter `sha256:c7d092759ce0d064b2b9b3f65249378719befc06bb8e684aee6cbec7d2529773`、SellerSprite `sha256:093f5ac4aaaee074d2ff056ae456eb7b64761cbc4a50651e46bdddd4101e476b`、LingXing `sha256:0e76c8d05796a97ada9ea8010368cdba7ad8da0c94d6f81ea4ab534c5eada94b`。
+- Phase 8 当前四个镜像 ID 分别为 LibreChat `sha256:49bbaa482dd3ba24b24a9d18c8b9f24648b99e51b24a4019e03eba13e3fe2769`、Adapter `sha256:c7d092759ce0d064b2b9b3f65249378719befc06bb8e684aee6cbec7d2529773`、SellerSprite `sha256:093f5ac4aaaee074d2ff056ae456eb7b64761cbc4a50651e46bdddd4101e476b`、LingXing `sha256:0e76c8d05796a97ada9ea8010368cdba7ad8da0c94d6f81ea4ab534c5eada94b`。
 - `deploy/verify-phase8.sh` 返回 `PHASE8_VERIFY_OK`；签名、防重放、限流、审计、会话隔离、网络隔离、入口、端口、备份和日志秘密扫描全部通过，所有 11 个生产服务均为 `healthy`。
 - 部署前备份：`/opt/cross-border-ai/deploy/backups/20260728T045919Z`；完成态备份：`/opt/cross-border-ai/deploy/backups/20260728T050729Z`。新备份已拆分 `config/`、`data/`、`secrets/`，秘密目录为 `0700`、环境文件为 `0600`，四个 MongoDB gzip 归档及 SHA-256 均验证通过。
 - 验收没有发送付费模型请求、没有执行真实 MCP 业务读取或写入，领星写工具继续关闭。
@@ -100,6 +100,7 @@ Phase 2 没有实现 Phase 5 的自动 New API 用户开通、部门预算、额
 - 2026-07-28 图片持久化热修复：确认生产 Compose 遗漏 `/app/client/public/images` 持久卷，API 重建后附件读取出现 `ENOENT` 并导致后续消息 HTTP 409。现已新增 `images` 命名卷，备份同时归档 uploads/images，回滚增加显式 `--restore-files`。强制重建 API 后文件保留测试返回 `FILE_PERSISTENCE_OK`，Phase 8 全量回归再次通过。
 - 热修复前保护性备份：`/opt/cross-border-ai/deploy/backups/20260728T081050Z`；热修复完成态备份：`/opt/cross-border-ai/deploy/backups/20260728T081359Z`。旧图片目录在修复前已为空，受影响的旧附件需要用户重新上传。
 - 2026-07-28 MCP 出站网络热修复：为 SellerSprite 与 LingXing 网关分别增加不发布 Host 端口的独立出站网络，保留内部 `mcp` 入站隔离。重建网关和 API 后只读工具目录初始化分别返回 44、23 个 Tool，完整 Phase 8 验收通过。完成态备份：`/opt/cross-border-ai/deploy/backups/20260728T082700Z`。
+- 2026-07-28 历史附件连续对话热修复：确认“闲置后继续对话报错”实际由旧对话引用已丢失图片引起，并非空闲超时。系统现在只跳过不存在的历史本地图片，继续保留文字上下文；正常图片与其他文件错误保持原有校验。3 项回归测试、完整 Phase 8 和 MCP 目录验证通过。完成态备份：`/opt/cross-border-ai/deploy/backups/20260728T095334Z`。
 
 ## Phase 5 私有 Skill 与共享 Agent 实施记录（2026-07-24）
 

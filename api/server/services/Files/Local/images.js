@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const sharp = require('sharp');
+const { logger } = require('@librechat/data-schemas');
 const { resizeImageBuffer } = require('../images/resize');
 const { updateUser, updateFile } = require('~/models');
 
@@ -87,7 +88,7 @@ function encodeImage(imagePath) {
  * for image payload handling: tuple order of [filepath, base64].
  * @param {Object} req - The request object.
  * @param {MongoFile} file - The file object.
- * @returns {Promise<[MongoFile, string]>} - A promise that resolves to an array of results from updateFile and encodeImage.
+ * @returns {Promise<[MongoFile, string | null]>} - A promise that resolves to an array of results from updateFile and encodeImage.
  */
 async function prepareImagesLocal(req, file) {
   const appConfig = req.config;
@@ -102,7 +103,19 @@ async function prepareImagesLocal(req, file) {
   const promises = [];
   promises.push(updateFile({ file_id: file.file_id }));
   promises.push(encodeImage(filepath));
-  return await Promise.all(promises);
+  try {
+    return await Promise.all(promises);
+  } catch (error) {
+    if (error?.code !== 'ENOENT') {
+      throw error;
+    }
+
+    logger.warn('[Files] Missing local image attachment skipped', {
+      fileId: file.file_id,
+      userId: req.user.id,
+    });
+    return [await promises[0], null];
+  }
 }
 
 /**

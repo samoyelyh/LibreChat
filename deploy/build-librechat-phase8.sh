@@ -37,6 +37,12 @@ docker run --rm --entrypoint sh "$image_id" -c \
   printf 'Phase 8 MCP request signer is missing from the built API.\n' >&2
   exit 1
 }
+docker run --rm --entrypoint grep "$image_id" \
+  -q 'Missing local image attachment skipped' \
+  /app/api/server/services/Files/Local/images.js || {
+  printf 'Missing historical image recovery is absent from the built API.\n' >&2
+  exit 1
+}
 
 if grep -q '^LIBRECHAT_IMAGE=' "$ENV_FILE"; then
   sed -i "s|^LIBRECHAT_IMAGE=.*|LIBRECHAT_IMAGE=${image_id}|" "$ENV_FILE"

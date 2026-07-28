@@ -30,6 +30,7 @@ LibreChat 上游基线仍固定为 `v0.8.7`。
 - `packages/api/src/mcp/connection.ts`
 - `packages/api/src/endpoints/models.ts`
 - `packages/api/src/endpoints/openai/config.ts`
+- `api/server/services/Files/Local/images.js`
 - 三个内部服务的认证、配置、数据库、代理、CLI 和类型文件
 - `deploy/docker-compose.production.yml`
 - `deploy/.env.example`
@@ -42,6 +43,7 @@ LibreChat 上游基线仍固定为 `v0.8.7`。
 
 - `packages/api/src/mcp/signing.ts`
 - `packages/api/src/mcp/signing.spec.ts`
+- `api/server/services/Files/Local/images.spec.js`
 - 三个服务的 `security.ts`
 - 两个 MCP 网关的 `security.test.ts`
 - `deploy/gateway-signing.js`
@@ -153,7 +155,7 @@ Phase 8 不可变镜像 ID：
 
 | 服务 | 镜像 ID |
 | --- | --- |
-| LibreChat API | `sha256:8cb0021533bc46c7dc16ec89beecf56e67114665203143f69413959193fd1500` |
+| LibreChat API | `sha256:49bbaa482dd3ba24b24a9d18c8b9f24648b99e51b24a4019e03eba13e3fe2769` |
 | AI Adapter | `sha256:c7d092759ce0d064b2b9b3f65249378719befc06bb8e684aee6cbec7d2529773` |
 | SellerSprite Gateway | `sha256:093f5ac4aaaee074d2ff056ae456eb7b64761cbc4a50651e46bdddd4101e476b` |
 | LingXing Gateway | `sha256:0e76c8d05796a97ada9ea8010368cdba7ad8da0c94d6f81ea4ab534c5eada94b` |
@@ -177,6 +179,16 @@ Phase 8 MCP 出站网络热修复（2026-07-28）：
 - 重建网关并重启 API 清除熔断状态后，只读 `initialize` 与 `tools/list` 成功：SellerSprite 44 个 Tool、LingXing 23 个 Tool、暴露写工具 0；
 - 完成态备份：`/opt/cross-border-ai/deploy/backups/20260728T082700Z`；
 - 完整 Phase 8 验收再次返回 `PHASE8_VERIFY_OK`，专用出站网络、内部入站、签名、防重放、限流、备份、端口和日志检查全部通过。
+
+Phase 8 历史附件连续对话热修复（2026-07-28）：
+
+- 用户反馈原对话闲置后继续发送会报错，只能新建对话且无法延续上下文；
+- 日志确认空闲不是根因：旧对话引用了图片持久化修复前已经丢失的本地图片，每次重建上下文时都触发同一个 `ENOENT`，生成失败后浏览器继续引用未落库临时回复而收到 HTTP 409；
+- 本地图片加载现在只在文件确实不存在时跳过该历史附件，保留文字消息与其余上下文继续生成；权限、格式及其他文件错误不会被忽略；
+- 新增 3 项回归测试，覆盖正常图片、缺失历史图片和非缺失类文件错误，全部通过；
+- 当前 LibreChat API 镜像为 `sha256:49bbaa482dd3ba24b24a9d18c8b9f24648b99e51b24a4019e03eba13e3fe2769`；
+- 完成态备份：`/opt/cross-border-ai/deploy/backups/20260728T095334Z`；
+- 完整 Phase 8 与两个 MCP 只读目录回归通过。受影响用户刷新原对话后即可从最后一条已保存消息继续，不需要新建对话；丢失图片本身仍需重新上传才能再次提供给模型查看。
 
 ## 14. 手工验证步骤
 
