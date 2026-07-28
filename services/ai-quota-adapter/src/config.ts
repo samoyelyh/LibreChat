@@ -18,6 +18,12 @@ const envSchema = z.object({
   AI_ADAPTER_REQUESTS_PER_MINUTE: z.coerce.number().int().min(1).max(10000).default(30),
   AI_ADAPTER_MAX_CONCURRENT_REQUESTS: z.coerce.number().int().min(1).max(100).default(2),
   AI_ADAPTER_AUDIT_RETENTION_DAYS: z.coerce.number().int().min(1).max(3650).default(90),
+  AI_ADAPTER_SIGNATURE_TOLERANCE_MS: z.coerce
+    .number()
+    .int()
+    .min(5000)
+    .max(300000)
+    .default(30000),
   AI_DEFAULT_USER_QUOTA: z.coerce.number().int().min(0).default(0),
   AI_DEFAULT_ALLOWED_MODELS: z.string().default('kimi-k2'),
   AI_ADAPTER_TEST_MODEL: z.string().min(1).default('kimi-k2'),
@@ -42,6 +48,7 @@ export type AdapterConfig = {
   requestsPerMinute: number;
   maxConcurrentRequests: number;
   auditRetentionDays: number;
+  signatureToleranceMs: number;
   defaultUserQuota: number;
   defaultAllowedModels: string[];
   testModel: string;
@@ -68,6 +75,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AdapterConfig 
     requestsPerMinute: parsed.AI_ADAPTER_REQUESTS_PER_MINUTE,
     maxConcurrentRequests: parsed.AI_ADAPTER_MAX_CONCURRENT_REQUESTS,
     auditRetentionDays: parsed.AI_ADAPTER_AUDIT_RETENTION_DAYS,
+    signatureToleranceMs: parsed.AI_ADAPTER_SIGNATURE_TOLERANCE_MS,
     defaultUserQuota: parsed.AI_DEFAULT_USER_QUOTA,
     defaultAllowedModels: [...new Set(
       parsed.AI_DEFAULT_ALLOWED_MODELS.split(',')

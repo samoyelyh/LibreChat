@@ -21,6 +21,7 @@ import {
   applyAxiosProxyConfig,
 } from '~/utils';
 import { getModelCacheTokenConfigKey, isScopedTokenConfigKey } from '~/endpoints/keys';
+import { signGatewayHeaders } from '~/mcp/signing';
 import { createSSRFSafeAgents, validateEndpointURL } from '~/auth';
 import { standardCache, tokenConfigCache } from '~/cache';
 
@@ -281,6 +282,12 @@ export async function fetchModels({
     if (user && userIdQuery) {
       url.searchParams.append('user', user);
     }
+    options.headers = signGatewayHeaders({
+      url: url.toString(),
+      method: 'GET',
+      bodyText: '',
+      headers: options.headers,
+    });
     applyAxiosProxyConfig(options, url);
     applyUserProvidedBaseURLProtection(options, ssrfAgents);
     const res = await axios.get(url.toString(), options);

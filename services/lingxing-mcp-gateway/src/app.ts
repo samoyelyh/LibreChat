@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
-import { actorHeaders, bearerUserId, hasInternalKey } from './auth.js';
+import { actorHeaders, bearerUserId } from './auth.js';
 import type { MongoStores } from './database.js';
 import { proxyMcp } from './proxy.js';
+import { verifySignedRequest } from './security.js';
 import type { LingxingClient } from './upstream.js';
 import type { BrowserActor, ConfiguredBy, GatewayConfig } from './types.js';
 
@@ -35,6 +36,7 @@ export function buildApp(
         paths: [
           'req.headers.authorization',
           'req.headers.x-mcp-gateway-key',
+          'req.headers.x-woda-signature',
           'req.body.key',
           'headers.x-mcp-key',
           'secret',
@@ -265,9 +267,32 @@ export function buildApp(
 
   app.register(async (routes) => {
     routes.addHook('preHandler', async (request, reply) => {
-      if (!hasInternalKey(request, config.internalKey)) {
-        return reply.code(401).send({ error: { code: 'invalid_internal_auth', message: 'Unauthorized' } });
+      const result = verifySignedRequest(
+        request,
+        config.internalKey,
+        config.signatureToleranceMs,
+      );
+      const deny = async (code: string) => {
+        await stores
+          .recordSecurityAudit({
+            requestId: request.id,
+            sourceIp: request.ip,
+            method: request.method,
+            path: request.url.split('?')[0] ?? request.url,
+            outcome: 'denied',
+            code,
+            createdAt: new Date(),
+          })
+          .catch(() => undefined);
+        return reply.code(401).send({ error: { code, message: 'Unauthorized' } });
+      };
+      if (!result.ok) {
+        return deny(result.code);
       }
+      if (!(await stores.consumeNonce(result.nonce, result.expiresAt))) {
+        return deny('replayed_request');
+      }
+      reply.header('x-woda-security-request-id', request.id);
     });
     routes.all('/mcp', async (request, reply) => {
       const headers = actorHeaders(request);

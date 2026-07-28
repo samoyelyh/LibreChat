@@ -68,6 +68,7 @@ export function buildApp(config: AdapterConfig, services: AppServices): FastifyI
               paths: [
                 'req.headers.authorization',
                 'req.headers.x-adapter-internal-key',
+                'req.headers.x-woda-signature',
                 '*.token',
                 '*.encryptedToken',
                 '*.encryptedManagementToken',
@@ -114,8 +115,40 @@ export function buildApp(config: AdapterConfig, services: AppServices): FastifyI
     }
   });
 
+  const authenticateAdapter = async (request: FastifyRequest): Promise<InternalActor> => {
+    const deny = async (code: string) => {
+      await services.mappings
+        .recordSecurityAudit({
+          requestId: request.id,
+          sourceIp: request.ip,
+          method: request.method,
+          path: request.url.split('?')[0] ?? request.url,
+          outcome: 'denied',
+          code,
+          createdAt: new Date(),
+        })
+        .catch(() => undefined);
+    };
+    let signed;
+    try {
+      signed = authenticateInternalRequest(
+        request,
+        config.internalKey,
+        config.signatureToleranceMs,
+      );
+    } catch (error) {
+      if (error instanceof AdapterError) await deny(error.code);
+      throw error;
+    }
+    if (!(await services.mappings.consumeNonce(signed.nonce, signed.expiresAt))) {
+      await deny('replayed_request');
+      throw new AdapterError(401, 'replayed_request', 'Adapter request was already used');
+    }
+    return signed.actor;
+  };
+
   app.get('/v1/models', async (request) => {
-    const actor = authenticateInternalRequest(request, config.internalKey);
+    const actor = await authenticateAdapter(request);
     const mapping = await services.accounts.ensure(actor);
     const response = await services.newApi.listModels(mappedToken(mapping, config.encryptionKey));
     return filterModels(response, mapping.allowedModels);
@@ -123,7 +156,7 @@ export function buildApp(config: AdapterConfig, services: AppServices): FastifyI
 
   for (const path of ['/v1/chat/completions', '/v1/completions', '/v1/responses', '/v1/embeddings']) {
     app.post(path, async (request, reply) => {
-      const actor = authenticateInternalRequest(request, config.internalKey);
+      const actor = await authenticateAdapter(request);
       await services.accounts.ensure(actor);
       await proxyCompletion(request, reply, actor, path, config, services);
     });

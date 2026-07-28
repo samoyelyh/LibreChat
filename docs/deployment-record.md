@@ -85,6 +85,19 @@
 
 Phase 2 没有实现 Phase 5 的自动 New API 用户开通、部门预算、额度调整后台和完整“我的额度”页面。当前余额与使用记录通过受 JWT 保护的 `/api/ai-quota/balance`、`/api/ai-quota/usage` 提供真实数据。
 
+## Phase 8 安全与生产收口（2026-07-28）
+
+- 分支：`woda/phase-8`；LibreChat 上游基线保持 `v0.8.7` / `9e74cc0e57b395926122bd4062c1fcedc48ed465`。
+- LibreChat 到 AI Adapter、SellerSprite 与 LingXing 网关的内部请求已改为 HMAC-SHA256 动态签名；静态内部密钥不再随请求发送。
+- 三个服务使用 MongoDB 唯一随机数与 TTL 防重放；两个 MCP 网关增加按用户、按 Tool 的 MongoDB 分布式分钟限流。
+- MCP 网关已移出 `edge`，只连接内部 `mcp` 与 `backend` 网络；宿主机仍只发布用户入口 `7999` 和管理入口 `3000`。
+- Phase 8 四个镜像 ID 分别为 LibreChat `sha256:8cb0021533bc46c7dc16ec89beecf56e67114665203143f69413959193fd1500`、Adapter `sha256:c7d092759ce0d064b2b9b3f65249378719befc06bb8e684aee6cbec7d2529773`、SellerSprite `sha256:093f5ac4aaaee074d2ff056ae456eb7b64761cbc4a50651e46bdddd4101e476b`、LingXing `sha256:0e76c8d05796a97ada9ea8010368cdba7ad8da0c94d6f81ea4ab534c5eada94b`。
+- `deploy/verify-phase8.sh` 返回 `PHASE8_VERIFY_OK`；签名、防重放、限流、审计、会话隔离、网络隔离、入口、端口、备份和日志秘密扫描全部通过，所有 11 个生产服务均为 `healthy`。
+- 部署前备份：`/opt/cross-border-ai/deploy/backups/20260728T045919Z`；完成态备份：`/opt/cross-border-ai/deploy/backups/20260728T050729Z`。新备份已拆分 `config/`、`data/`、`secrets/`，秘密目录为 `0700`、环境文件为 `0600`，四个 MongoDB gzip 归档及 SHA-256 均验证通过。
+- 验收没有发送付费模型请求、没有执行真实 MCP 业务读取或写入，领星写工具继续关闭。
+- SellerSprite 外部上游在最终复核时返回 `connection failed`；网关配置与最近 44 个 Tool 目录记录仍在，平台内部安全链路通过，真实 SellerSprite 调用暂时处于外部依赖降级状态。
+- HTTPS 继续等待内部域名/证书或公司 CA；SSO 继续等待 OIDC/SAML 身份提供方参数。
+
 ## Phase 5 私有 Skill 与共享 Agent 实施记录（2026-07-24）
 
 - 两个管理员 Prompt 已迁移为 `executionOnly` Skill，并各自绑定一个共享业务 Agent；原 Prompt 保留为管理员历史源。

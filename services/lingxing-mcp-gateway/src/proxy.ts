@@ -3,7 +3,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { canUseTool, filterTools, permissionGroupForTool } from './policy.js';
 import { structureToolCallBody } from './structured-result.js';
 import { responseHeaders, type LingxingClient } from './upstream.js';
-import type { CallAudit, VerifiedActor } from './types.js';
+import type { CallAudit, RateLimitDecision, VerifiedActor } from './types.js';
 
 interface JsonRpcRequest {
   id?: string | number | null;
@@ -20,21 +20,8 @@ export interface ProxyStores {
   getCredentialSecret(userId: string, allowUntested?: boolean): Promise<string | null>;
   markUsed(userId: string): Promise<void>;
   recordCallAudits(values: CallAudit[]): Promise<void>;
+  consumeToolRateLimit(userId: string, tool: string): Promise<RateLimitDecision>;
 }
-
-class PerToolRateLimiter {
-  private readonly lastCall = new Map<string, number>();
-
-  check(userId: string, tool: string, now = Date.now()): number {
-    const key = `${userId}:${tool}`;
-    const previous = this.lastCall.get(key) ?? 0;
-    const retryAfterMs = Math.max(0, 1000 - (now - previous));
-    if (retryAfterMs === 0) this.lastCall.set(key, now);
-    return retryAfterMs;
-  }
-}
-
-const rateLimiter = new PerToolRateLimiter();
 
 function requests(body: unknown): JsonRpcRequest[] {
   if (Array.isArray(body)) {
@@ -151,11 +138,17 @@ export async function proxyMcp(input: {
     return;
   }
 
-  const limited = toolCalls
-    .map((call) => ({ call, retryAfterMs: rateLimiter.check(actor.userId, call.tool) }))
-    .find((value) => value.retryAfterMs > 0);
+  const decisions = await Promise.all(
+    toolCalls.map(async (call) => ({
+      call,
+      decision: await stores.consumeToolRateLimit(actor.userId, call.tool),
+    })),
+  );
+  const limited = decisions.find(({ decision }) => !decision.allowed);
   if (limited) {
-    reply.header('retry-after', '1');
+    reply.header('retry-after', String(limited.decision.retryAfterSeconds));
+    reply.header('x-ratelimit-limit', String(limited.decision.limit));
+    reply.header('x-ratelimit-remaining', String(limited.decision.remaining));
     await stores.recordCallAudits([
       audit(actor, limited.call, {
         requestId,
@@ -166,7 +159,7 @@ export async function proxyMcp(input: {
         errorCode: 'tool_rate_limited',
       }),
     ]);
-    jsonRpcError(reply, 429, limited.call.id, -32029, '同一领星工具每秒最多调用一次');
+    jsonRpcError(reply, 429, limited.call.id, -32029, '领星工具调用频率超过限制');
     return;
   }
 
@@ -269,4 +262,4 @@ export async function proxyMcp(input: {
   }
 }
 
-export const testing = { calls, filterToolsText, PerToolRateLimiter };
+export const testing = { calls, filterToolsText };

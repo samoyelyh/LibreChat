@@ -24,6 +24,7 @@ import { createSSRFSafeUndiciConnect, isSSRFTarget, resolveHostnameSSRF } from '
 import { runOutsideTracing } from '~/utils/tracing';
 import { isAddressAllowed } from '~/auth/domain';
 import { sanitizeUrlForLogging } from './utils';
+import { INTERNAL_GATEWAY_KEY_HEADER, SIGNATURE_HEADERS, signGatewayHeaders } from './signing';
 import { withTimeout } from '~/utils/promise';
 import { mcpConfig } from './mcpConfig';
 
@@ -476,6 +477,8 @@ const CROSS_ORIGIN_FORBIDDEN_HEADERS = new Set([
   'proxy-authorization',
   'cookie',
   'mcp-session-id',
+  INTERNAL_GATEWAY_KEY_HEADER,
+  ...Object.values(SIGNATURE_HEADERS),
 ]);
 
 /**
@@ -1418,6 +1421,36 @@ export class MCPConnection extends EventEmitter {
         getRequestDispatcher(isGet, currentUrlString, currentAllowedAddresses),
         requestHeaders,
       );
+      const initialHeaders = normalizeInitHeaders(currentInit);
+      const signingSecretEntry = Object.entries(initialHeaders).find(
+        ([key]) => key.toLowerCase() === INTERNAL_GATEWAY_KEY_HEADER,
+      );
+      const signingSecret = signingSecretEntry?.[1];
+      const applyInternalSignature = (
+        targetUrl: string,
+        targetInit: UndiciRequestInit,
+      ): UndiciRequestInit => {
+        if (!signingSecret) {
+          return targetInit;
+        }
+        const bodyText = getBodyText(targetInit.body);
+        if (targetInit.body != null && bodyText == null) {
+          throw new Error('Signed MCP gateway requests require a deterministic text body');
+        }
+        return {
+          ...targetInit,
+          headers: signGatewayHeaders({
+            url: targetUrl,
+            method: (targetInit.method ?? 'GET').toUpperCase(),
+            bodyText: bodyText ?? '',
+            headers: {
+              ...normalizeInitHeaders(targetInit),
+              [INTERNAL_GATEWAY_KEY_HEADER]: signingSecret,
+            },
+          }),
+        };
+      };
+      currentInit = applyInternalSignature(currentUrlString, currentInit);
       const originalOrigin = new URL(currentUrlString).origin;
       for (let redirects = 0; ; redirects++) {
         await assertProxiedRequestTargetAllowed(
@@ -1514,6 +1547,9 @@ export class MCPConnection extends EventEmitter {
               forceRedirectSSRFConnect,
             ),
           };
+        }
+        if (!isCrossOriginRedirect) {
+          currentInit = applyInternalSignature(targetUrl.href, currentInit);
         }
 
         currentUrlString = targetUrl.href;

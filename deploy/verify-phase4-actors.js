@@ -1,22 +1,30 @@
 const mongoose = require('mongoose');
+const { signedHeaders } = require('/app/deploy/gateway-signing.js');
 
 const gatewayUrl = 'http://lingxing-mcp-gateway:4300/mcp';
 const internalKey = process.env.LINGXING_MCP_INTERNAL_KEY;
 if (!internalKey) throw new Error('LINGXING_MCP_INTERNAL_KEY is required');
 
 async function request(user, body) {
+  const bodyText = JSON.stringify(body);
+  const headers = {
+    Accept: 'application/json, text/event-stream',
+    'Content-Type': 'application/json',
+    'MCP-Protocol-Version': '2025-06-18',
+    'X-LibreChat-User-ID': String(user._id),
+    'X-LibreChat-User-Email': user.email,
+    'X-LibreChat-User-Role': user.role,
+  };
   return fetch(gatewayUrl, {
     method: 'POST',
-    headers: {
-      Accept: 'application/json, text/event-stream',
-      'Content-Type': 'application/json',
-      'MCP-Protocol-Version': '2025-06-18',
-      'X-MCP-Gateway-Key': internalKey,
-      'X-LibreChat-User-ID': String(user._id),
-      'X-LibreChat-User-Email': user.email,
-      'X-LibreChat-User-Role': user.role,
-    },
-    body: JSON.stringify(body),
+    headers: signedHeaders({
+      secret: internalKey,
+      url: gatewayUrl,
+      method: 'POST',
+      body: bodyText,
+      headers,
+    }),
+    body: bodyText,
   });
 }
 
@@ -38,17 +46,29 @@ async function request(user, body) {
       throw new Error(`Write tool policy failed: HTTP ${write.status}`);
     }
 
+    const mismatchBody = JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'tools/list',
+      params: {},
+    });
+    const mismatchHeaders = {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      'X-LibreChat-User-ID': String(admin._id),
+      'X-LibreChat-User-Email': `mismatch-${admin.email}`,
+      'X-LibreChat-User-Role': admin.role,
+    };
     const mismatch = await fetch(gatewayUrl, {
       method: 'POST',
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-        'X-MCP-Gateway-Key': internalKey,
-        'X-LibreChat-User-ID': String(admin._id),
-        'X-LibreChat-User-Email': `mismatch-${admin.email}`,
-        'X-LibreChat-User-Role': admin.role,
-      },
-      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }),
+      headers: signedHeaders({
+        secret: internalKey,
+        url: gatewayUrl,
+        method: 'POST',
+        body: mismatchBody,
+        headers: mismatchHeaders,
+      }),
+      body: mismatchBody,
     });
     if (mismatch.status !== 403) throw new Error(`Actor mismatch was not denied: ${mismatch.status}`);
 

@@ -383,6 +383,11 @@ export class NewApiClient implements NewApiClientContract, NewApiProvisioningCli
     const headers = new Headers(init.headers);
     headers.delete('authorization');
     headers.delete('x-adapter-internal-key');
+    headers.delete('x-woda-signature-version');
+    headers.delete('x-woda-timestamp');
+    headers.delete('x-woda-nonce');
+    headers.delete('x-woda-content-sha256');
+    headers.delete('x-woda-signature');
     headers.delete('x-librechat-user-id');
     headers.delete('x-librechat-user-email');
     headers.delete('x-librechat-conversation-id');

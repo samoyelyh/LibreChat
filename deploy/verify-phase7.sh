@@ -51,8 +51,12 @@ check 'phase7 agent call steps, skills, ACLs, and read-only boundaries' \
   bash -lc "\"$DEPLOY_DIR/seed-phase6-agents.sh\" verify | grep -q PHASE6_AGENTS_OK"
 check 'ordinary user sees shared Agents while Skill bodies stay redacted' \
   bash -lc "cd \"$DEPLOY_DIR\" && docker compose --env-file .env -f docker-compose.production.yml exec -T api node /app/deploy/verify-phase6-api.js | grep -q PHASE6_API_OK"
-check 'live MCP catalogs and write-tool filtering' \
-  bash -lc "cd \"$DEPLOY_DIR\" && docker compose --env-file .env -f docker-compose.production.yml exec -T api node /app/deploy/verify-phase6-live-tools.js | grep -q PHASE6_LIVE_TOOLS_OK"
+if [[ "${SKIP_EXTERNAL_MCP_CATALOGS:-false}" == true ]]; then
+  printf 'SKIP live MCP catalogs: external dependency checks are outside this verification run\n'
+else
+  check 'live MCP catalogs and write-tool filtering' \
+    bash -lc "cd \"$DEPLOY_DIR\" && docker compose --env-file .env -f docker-compose.production.yml exec -T api node /app/deploy/verify-phase6-live-tools.js | grep -q PHASE6_LIVE_TOOLS_OK"
+fi
 check 'LingXing write call remains denied at the gateway' \
   bash -lc "cd \"$DEPLOY_DIR\" && docker compose --env-file .env -f docker-compose.production.yml exec -T api node /app/deploy/verify-phase4-actors.js | grep -q PHASE4_ACTOR_SECURITY_OK"
 check 'SellerSprite deterministic structured fixture' \

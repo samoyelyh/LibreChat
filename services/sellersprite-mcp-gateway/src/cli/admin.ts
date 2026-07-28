@@ -1,15 +1,23 @@
 import { loadConfig } from '../config.js';
+import { createSignedHeaders } from '../security.js';
 
 const command = process.argv[2] || 'status';
 const config = loadConfig();
 const baseUrl = `http://127.0.0.1:${config.port}/admin`;
 
 async function request(path: string, init?: RequestInit): Promise<Record<string, unknown>> {
+  const method = init?.method ?? 'GET';
+  const bodyText = typeof init?.body === 'string' ? init.body : '';
   const response = await fetch(`${baseUrl}${path}`, {
     ...init,
     headers: {
-      'X-MCP-Gateway-Key': config.internalKey,
       'Content-Type': 'application/json',
+      ...createSignedHeaders({
+        secret: config.internalKey,
+        method,
+        path: `/admin${path}`,
+        bodyText,
+      }),
       ...(init?.headers ?? {}),
     },
   });

@@ -13,6 +13,13 @@ const envSchema = z.object({
   SELLERSPRITE_MCP_TIMEOUT_MS: z.coerce.number().int().min(1000).max(300000).default(120000),
   SELLERSPRITE_MCP_AUDIT_RETENTION_DAYS: z.coerce.number().int().min(30).max(3650).default(365),
   SELLERSPRITE_MCP_MONTHLY_LIMIT: z.coerce.number().int().min(0).default(0),
+  SELLERSPRITE_MCP_SIGNATURE_TOLERANCE_MS: z.coerce
+    .number()
+    .int()
+    .min(5000)
+    .max(300000)
+    .default(30000),
+  SELLERSPRITE_MCP_REQUESTS_PER_MINUTE: z.coerce.number().int().min(1).max(10000).default(60),
 });
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): GatewayConfig {
@@ -33,5 +40,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): GatewayConfig 
     requestTimeoutMs: parsed.SELLERSPRITE_MCP_TIMEOUT_MS,
     auditRetentionDays: parsed.SELLERSPRITE_MCP_AUDIT_RETENTION_DAYS,
     monthlyLimit: parsed.SELLERSPRITE_MCP_MONTHLY_LIMIT,
+    signatureToleranceMs: parsed.SELLERSPRITE_MCP_SIGNATURE_TOLERANCE_MS,
+    requestsPerMinute: parsed.SELLERSPRITE_MCP_REQUESTS_PER_MINUTE,
   };
 }

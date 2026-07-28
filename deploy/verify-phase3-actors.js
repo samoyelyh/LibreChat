@@ -5,6 +5,7 @@ require('module-alias')({ base: path.resolve('/app/api') });
 const connect = require('/app/config/connect');
 const models = require('@librechat/data-schemas').createModels(mongoose);
 const { SystemRoles } = require('librechat-data-provider');
+const { signedHeaders } = require('/app/deploy/gateway-signing.js');
 
 const gatewayUrl = 'http://sellersprite-mcp-gateway:4200/mcp';
 const internalKey = process.env.SELLERSPRITE_MCP_INTERNAL_KEY;
@@ -13,11 +14,25 @@ if (!internalKey) throw new Error('SELLERSPRITE_MCP_INTERNAL_KEY is missing');
 const headersFor = (user) => ({
   Accept: 'application/json, text/event-stream',
   'Content-Type': 'application/json',
-  'X-MCP-Gateway-Key': internalKey,
   'X-LibreChat-User-ID': user._id.toString(),
   'X-LibreChat-User-Email': user.email,
   'X-LibreChat-User-Role': user.role,
 });
+
+const signedRequest = (user, body) => {
+  const bodyText = JSON.stringify(body);
+  return fetch(gatewayUrl, {
+    method: 'POST',
+    headers: signedHeaders({
+      secret: internalKey,
+      url: gatewayUrl,
+      method: 'POST',
+      body: bodyText,
+      headers: headersFor(user),
+    }),
+    body: bodyText,
+  });
+};
 
 const initialize = {
   jsonrpc: '2.0',
@@ -38,19 +53,11 @@ const initialize = {
     const ordinary = await User.findOne({ role: SystemRoles.USER }).select('_id email role').lean();
     if (!admin || !ordinary) throw new Error('Both ADMIN and ordinary USER accounts are required');
 
-    const allowed = await fetch(gatewayUrl, {
-      method: 'POST',
-      headers: headersFor(admin),
-      body: JSON.stringify(initialize),
-    });
+    const allowed = await signedRequest(admin, initialize);
     await allowed.arrayBuffer();
     if (!allowed.ok) throw new Error(`ADMIN initialize returned HTTP ${allowed.status}`);
 
-    const denied = await fetch(gatewayUrl, {
-      method: 'POST',
-      headers: headersFor(ordinary),
-      body: JSON.stringify(initialize),
-    });
+    const denied = await signedRequest(ordinary, initialize);
     await denied.arrayBuffer();
     if (denied.status !== 403) throw new Error(`USER initialize returned HTTP ${denied.status}`);
 

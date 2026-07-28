@@ -19,6 +19,8 @@ export interface GatewayConfig {
   gatewayDatabase: string;
   requestTimeoutMs: number;
   auditRetentionDays: number;
+  signatureToleranceMs: number;
+  requestsPerMinute: number;
 }
 
 export interface ActorHeaders {
@@ -123,4 +125,21 @@ export interface ConnectionTestResult {
   code: string;
   message: string;
   toolCount?: number;
+}
+
+export interface SecurityAudit {
+  requestId: string;
+  sourceIp: string;
+  method: string;
+  path: string;
+  outcome: 'denied';
+  code: string;
+  createdAt: Date;
+}
+
+export interface RateLimitDecision {
+  allowed: boolean;
+  limit: number;
+  remaining: number;
+  retryAfterSeconds: number;
 }

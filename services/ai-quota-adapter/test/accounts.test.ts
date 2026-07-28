@@ -57,6 +57,7 @@ const config: AdapterConfig = {
   requestsPerMinute: 30,
   maxConcurrentRequests: 2,
   auditRetentionDays: 90,
+  signatureToleranceMs: 30000,
   defaultUserQuota: 0,
   defaultAllowedModels: ['kimi-k2'],
   testModel: 'kimi-k2',
@@ -154,6 +155,12 @@ class MemoryAccountStore implements AccountStore {
   async recordProvisioningAudit(audit: ProvisioningAudit): Promise<void> {
     this.audits.push(audit);
   }
+
+  async consumeNonce(): Promise<boolean> {
+    return true;
+  }
+
+  async recordSecurityAudit(): Promise<void> {}
 
   async close(): Promise<void> {}
 }

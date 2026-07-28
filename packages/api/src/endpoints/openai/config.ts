@@ -1,5 +1,6 @@
 import { Agent } from 'undici';
 import { Providers } from '@librechat/agents';
+import { createSignedFetch } from '~/mcp/signing';
 import { KnownEndpoints, EModelEndpoint, ReasoningParameterFormat } from 'librechat-data-provider';
 import type { Dispatcher } from 'undici';
 import type * as t from '~/types';
@@ -291,6 +292,16 @@ export function getOpenAIConfig(
       ssrfAgents,
       redirect: shouldProtectUserBaseURL ? 'error' : undefined,
     }) as unknown as Fetch;
+  }
+
+  if (
+    Object.keys(configOptions.defaultHeaders ?? {}).some(
+      (key) => key.toLowerCase() === 'x-adapter-internal-key',
+    )
+  ) {
+    configOptions.fetch = createSignedFetch(
+      (configOptions.fetch as typeof fetch | undefined) ?? globalThis.fetch,
+    ) as unknown as Fetch;
   }
 
   const result: t.OpenAIConfigResult = {

@@ -1,12 +1,20 @@
 import { createHash } from 'node:crypto';
-import { MongoClient, ObjectId, type Collection, type WithId } from 'mongodb';
+import {
+  MongoClient,
+  MongoServerError,
+  ObjectId,
+  type Collection,
+  type WithId,
+} from 'mongodb';
 import { authorizeIdentity } from './policy.js';
 import type {
   ActorHeaders,
   CallAudit,
   CredentialState,
   GatewayConfig,
+  RateLimitDecision,
   SafeStatus,
+  SecurityAudit,
   VerifiedActor,
 } from './types.js';
 
@@ -20,6 +28,17 @@ interface LibreChatUser {
 interface LibreChatGroup {
   name: string;
   memberIds: string[];
+}
+
+interface NonceDocument {
+  _id: string;
+  expiresAt: Date;
+}
+
+interface RateLimitDocument {
+  _id: string;
+  count: number;
+  expiresAt: Date;
 }
 
 export function currentMonth(now = new Date()): string {
@@ -36,6 +55,9 @@ export class MongoStores {
   private readonly groups: Collection<LibreChatGroup>;
   private readonly audits: Collection<CallAudit>;
   private readonly states: Collection<CredentialState>;
+  private readonly nonces: Collection<NonceDocument>;
+  private readonly rateLimits: Collection<RateLimitDocument>;
+  private readonly securityAudits: Collection<SecurityAudit>;
 
   constructor(private readonly config: GatewayConfig) {
     this.client = new MongoClient(config.mongoUri, {
@@ -48,6 +70,9 @@ export class MongoStores {
     this.groups = librechat.collection<LibreChatGroup>('groups');
     this.audits = gateway.collection<CallAudit>('sellersprite_call_audits');
     this.states = gateway.collection<CredentialState>('sellersprite_admin_state');
+    this.nonces = gateway.collection<NonceDocument>('gateway_request_nonces');
+    this.rateLimits = gateway.collection<RateLimitDocument>('gateway_rate_limits');
+    this.securityAudits = gateway.collection<SecurityAudit>('gateway_security_audits');
   }
 
   async connect(): Promise<void> {
@@ -64,7 +89,69 @@ export class MongoStores {
           name: 'audit_retention_ttl',
         },
       ),
+      this.nonces.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0, name: 'nonce_ttl' }),
+      this.rateLimits.createIndex(
+        { expiresAt: 1 },
+        { expireAfterSeconds: 0, name: 'rate_limit_ttl' },
+      ),
+      this.securityAudits.createIndex(
+        { createdAt: 1 },
+        {
+          expireAfterSeconds: this.config.auditRetentionDays * 86400,
+          name: 'security_audit_ttl',
+        },
+      ),
+      this.securityAudits.createIndex(
+        { code: 1, createdAt: -1 },
+        { name: 'security_code_time' },
+      ),
     ]);
+  }
+
+  async consumeNonce(nonce: string, expiresAt: Date): Promise<boolean> {
+    try {
+      await this.nonces.insertOne({ _id: nonce, expiresAt });
+      return true;
+    } catch (error) {
+      if (error instanceof MongoServerError && error.code === 11000) return false;
+      throw error;
+    }
+  }
+
+  async recordSecurityAudit(audit: SecurityAudit): Promise<void> {
+    await this.securityAudits.insertOne(audit);
+  }
+
+  async consumeToolRateLimit(
+    userId: string,
+    tool: string,
+    now = new Date(),
+  ): Promise<RateLimitDecision> {
+    const bucketStart = Math.floor(now.getTime() / 60000) * 60000;
+    const expiresAt = new Date(bucketStart + 120000);
+    const id = `${userId}:${tool}:${bucketStart}`;
+    let document: WithId<RateLimitDocument> | null;
+    try {
+      document = await this.rateLimits.findOneAndUpdate(
+        { _id: id },
+        { $inc: { count: 1 }, $setOnInsert: { expiresAt } },
+        { upsert: true, returnDocument: 'after' },
+      );
+    } catch (error) {
+      if (!(error instanceof MongoServerError) || error.code !== 11000) throw error;
+      document = await this.rateLimits.findOneAndUpdate(
+        { _id: id },
+        { $inc: { count: 1 } },
+        { returnDocument: 'after' },
+      );
+    }
+    const count = document?.count ?? 1;
+    return {
+      allowed: count <= this.config.requestsPerMinute,
+      limit: this.config.requestsPerMinute,
+      remaining: Math.max(0, this.config.requestsPerMinute - count),
+      retryAfterSeconds: Math.max(1, Math.ceil((bucketStart + 60000 - now.getTime()) / 1000)),
+    };
   }
 
   async ping(): Promise<void> {

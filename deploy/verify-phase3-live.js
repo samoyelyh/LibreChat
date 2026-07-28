@@ -5,6 +5,7 @@ require('module-alias')({ base: path.resolve('/app/api') });
 const connect = require('/app/config/connect');
 const models = require('@librechat/data-schemas').createModels(mongoose);
 const { SystemRoles } = require('librechat-data-provider');
+const { signedHeaders } = require('/app/deploy/gateway-signing.js');
 
 const gatewayUrl = 'http://sellersprite-mcp-gateway:4200/mcp';
 const internalKey = process.env.SELLERSPRITE_MCP_INTERNAL_KEY;
@@ -30,7 +31,6 @@ function parseMcp(text) {
     const baseHeaders = {
       Accept: 'application/json, text/event-stream',
       'Content-Type': 'application/json',
-      'X-MCP-Gateway-Key': internalKey,
       'X-LibreChat-User-ID': admin._id.toString(),
       'X-LibreChat-User-Email': admin.email,
       'X-LibreChat-User-Role': admin.role,
@@ -38,14 +38,22 @@ function parseMcp(text) {
       'X-LibreChat-Message-ID': 'phase3-live-acceptance',
     };
     const post = async (body) => {
+      const bodyText = JSON.stringify(body);
+      const headers = {
+        ...baseHeaders,
+        'MCP-Protocol-Version': protocolVersion,
+        ...(sessionId ? { 'MCP-Session-Id': sessionId } : {}),
+      };
       const response = await fetch(gatewayUrl, {
         method: 'POST',
-        headers: {
-          ...baseHeaders,
-          'MCP-Protocol-Version': protocolVersion,
-          ...(sessionId ? { 'MCP-Session-Id': sessionId } : {}),
-        },
-        body: JSON.stringify(body),
+        headers: signedHeaders({
+          secret: internalKey,
+          url: gatewayUrl,
+          method: 'POST',
+          body: bodyText,
+          headers,
+        }),
+        body: bodyText,
       });
       sessionId ||= response.headers.get('mcp-session-id');
       const text = await response.text();
@@ -92,11 +100,16 @@ function parseMcp(text) {
     if (sessionId) {
       await fetch(gatewayUrl, {
         method: 'DELETE',
-        headers: {
-          ...baseHeaders,
-          'MCP-Protocol-Version': protocolVersion,
-          'MCP-Session-Id': sessionId,
-        },
+        headers: signedHeaders({
+          secret: internalKey,
+          url: gatewayUrl,
+          method: 'DELETE',
+          headers: {
+            ...baseHeaders,
+            'MCP-Protocol-Version': protocolVersion,
+            'MCP-Session-Id': sessionId,
+          },
+        }),
       }).then((response) => response.arrayBuffer());
     }
     console.log('PHASE3_LIVE_CALL_OK tool=trademark_country_list');

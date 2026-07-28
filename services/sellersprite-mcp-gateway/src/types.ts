@@ -16,6 +16,8 @@ export interface GatewayConfig {
   requestTimeoutMs: number;
   auditRetentionDays: number;
   monthlyLimit: number;
+  signatureToleranceMs: number;
+  requestsPerMinute: number;
 }
 
 export interface ActorHeaders {
@@ -83,4 +85,21 @@ export interface SafeStatus {
   monthlyCallCount: number;
   monthlyLimit: number | null;
   usageRatio: number | null;
+}
+
+export interface SecurityAudit {
+  requestId: string;
+  sourceIp: string;
+  method: string;
+  path: string;
+  outcome: 'denied';
+  code: string;
+  createdAt: Date;
+}
+
+export interface RateLimitDecision {
+  allowed: boolean;
+  limit: number;
+  remaining: number;
+  retryAfterSeconds: number;
 }

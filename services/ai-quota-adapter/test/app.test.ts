@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildApp, type AppServices } from '../src/app.js';
 import type { AdapterConfig } from '../src/config.js';
 import { AdapterError } from '../src/errors.js';
+import { createSignedHeaders } from '../src/security.js';
 import type {
   AccountSummary,
   AiGatewayAccountMapping,
@@ -34,6 +35,7 @@ const config: AdapterConfig = {
   requestsPerMinute: 30,
   maxConcurrentRequests: 2,
   auditRetentionDays: 90,
+  signatureToleranceMs: 30000,
   defaultUserQuota: 0,
   defaultAllowedModels: ['kimi-k2'],
   testModel: 'kimi-k2',
@@ -55,11 +57,23 @@ const mapping: AiGatewayAccountMapping = {
   updatedAt: new Date('2026-01-01T00:00:00Z'),
 };
 
-const internalHeaders = {
-  'x-adapter-internal-key': config.internalKey,
-  'x-librechat-user-id': mapping.librechatUserId,
-  'x-librechat-user-email': mapping.librechatEmail,
-};
+function internalHeaders(
+  url: string,
+  method: string,
+  payload?: object,
+  user: AiGatewayAccountMapping = mapping,
+) {
+  return createSignedHeaders({
+    secret: config.internalKey,
+    url: `http://adapter.test${url}`,
+    method,
+    ...(payload ? { bodyText: JSON.stringify(payload) } : {}),
+    actorHeaders: {
+      'x-librechat-user-id': user.librechatUserId,
+      'x-librechat-user-email': user.librechatEmail,
+    },
+  });
+}
 
 const policy: QuotaPolicy = {
   policyId: 'default:*',
@@ -154,6 +168,8 @@ describe('AI quota adapter', () => {
         listPolicies: async () => [policy],
         upsertPolicy: async () => policy,
         recordProvisioningAudit: async () => undefined,
+        consumeNonce: async () => true,
+        recordSecurityAudit: async () => undefined,
         close: async () => undefined,
       },
       audits: { record: async (audit) => void audits.push(audit) },
@@ -226,17 +242,25 @@ describe('AI quota adapter', () => {
   afterEach(async () => app.close());
 
   it('returns only the mapped model list', async () => {
-    const response = await app.inject({ method: 'GET', url: '/v1/models', headers: internalHeaders });
+    const response = await app.inject({
+      method: 'GET',
+      url: '/v1/models',
+      headers: internalHeaders('/v1/models', 'GET'),
+    });
     expect(response.statusCode).toBe(200);
     expect(response.json().data).toEqual([{ id: 'kimi-k2', object: 'model' }]);
   });
 
   it('rejects a forged or unauthorized model before relay', async () => {
+    const payload = {
+      model: 'forbidden-model',
+      messages: [{ role: 'user', content: 'test' }],
+    };
     const response = await app.inject({
       method: 'POST',
       url: '/v1/chat/completions',
-      headers: internalHeaders,
-      payload: { model: 'forbidden-model', messages: [{ role: 'user', content: 'test' }] },
+      headers: internalHeaders('/v1/chat/completions', 'POST', payload),
+      payload,
     });
     expect(response.statusCode).toBe(403);
     expect(response.json().error.code).toBe('model_not_allowed');
@@ -244,11 +268,18 @@ describe('AI quota adapter', () => {
   });
 
   it('injects the mapped token once and records metadata-only audit', async () => {
+    const payload = {
+      model: 'kimi-k2',
+      messages: [{ role: 'user', content: 'secret prompt' }],
+    };
     const response = await app.inject({
       method: 'POST',
       url: '/v1/chat/completions',
-      headers: { ...internalHeaders, authorization: 'Bearer attacker-value' },
-      payload: { model: 'kimi-k2', messages: [{ role: 'user', content: 'secret prompt' }] },
+      headers: {
+        ...internalHeaders('/v1/chat/completions', 'POST', payload),
+        authorization: 'Bearer attacker-value',
+      },
+      payload,
     });
     expect(response.statusCode).toBe(200);
     expect(relaySpy).toHaveBeenCalledTimes(1);
@@ -284,15 +315,15 @@ describe('AI quota adapter', () => {
     });
 
     for (const user of [mapping, secondMapping]) {
+      const payload = {
+        model: 'kimi-k2',
+        messages: [{ role: 'user', content: 'test' }],
+      };
       const response = await app.inject({
         method: 'POST',
         url: '/v1/chat/completions',
-        headers: {
-          'x-adapter-internal-key': config.internalKey,
-          'x-librechat-user-id': user.librechatUserId,
-          'x-librechat-user-email': user.librechatEmail,
-        },
-        payload: { model: 'kimi-k2', messages: [{ role: 'user', content: 'test' }] },
+        headers: internalHeaders('/v1/chat/completions', 'POST', payload, user),
+        payload,
       });
       expect(response.statusCode).toBe(200);
     }
@@ -306,11 +337,16 @@ describe('AI quota adapter', () => {
         headers: { 'content-type': 'text/event-stream' },
       }),
     );
+    const payload = {
+      model: 'kimi-k2',
+      messages: [{ role: 'user', content: 'test' }],
+      stream: true,
+    };
     const response = await app.inject({
       method: 'POST',
       url: '/v1/chat/completions',
-      headers: internalHeaders,
-      payload: { model: 'kimi-k2', messages: [{ role: 'user', content: 'test' }], stream: true },
+      headers: internalHeaders('/v1/chat/completions', 'POST', payload),
+      payload,
     });
     expect(response.statusCode).toBe(200);
     expect(response.body).toContain('data: [DONE]');

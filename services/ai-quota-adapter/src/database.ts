@@ -1,4 +1,10 @@
-import { MongoClient, ObjectId, type Collection, type WithId } from 'mongodb';
+import {
+  MongoClient,
+  MongoServerError,
+  ObjectId,
+  type Collection,
+  type WithId,
+} from 'mongodb';
 import type { AccountStore, AuditStore } from './contracts.js';
 import type {
   AiGatewayAccountMapping,
@@ -8,6 +14,7 @@ import type {
   ProvisioningAudit,
   QuotaPolicy,
   SafeMapping,
+  SecurityAudit,
 } from './types.js';
 
 type MappingDocument = AiGatewayAccountMapping;
@@ -25,6 +32,11 @@ interface LibreChatUser {
 interface LibreChatGroup {
   name: string;
   memberIds: string[];
+}
+
+interface NonceDocument {
+  _id: string;
+  expiresAt: Date;
 }
 
 function toSafe(document: WithId<MappingDocument>): SafeMapping {
@@ -70,6 +82,8 @@ export class MongoStores implements AccountStore, AuditStore {
   private readonly audits: Collection<CallAudit>;
   private readonly policies: Collection<QuotaPolicy>;
   private readonly provisioningAudits: Collection<ProvisioningAudit>;
+  private readonly nonces: Collection<NonceDocument>;
+  private readonly securityAudits: Collection<SecurityAudit>;
 
   constructor(
     uri: string,
@@ -86,6 +100,8 @@ export class MongoStores implements AccountStore, AuditStore {
     this.audits = gateway.collection<CallAudit>('ai_gateway_call_audits');
     this.policies = gateway.collection<QuotaPolicy>('ai_quota_policies');
     this.provisioningAudits = gateway.collection<ProvisioningAudit>('ai_quota_provisioning_audits');
+    this.nonces = gateway.collection<NonceDocument>('adapter_request_nonces');
+    this.securityAudits = gateway.collection<SecurityAudit>('adapter_security_audits');
     this.auditRetentionDays = auditRetentionDays;
   }
 
@@ -119,7 +135,33 @@ export class MongoStores implements AccountStore, AuditStore {
         { createdAt: 1 },
         { expireAfterSeconds: this.auditRetentionDays * 86400, name: 'audit_retention_ttl' },
       ),
+      this.nonces.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0, name: 'nonce_ttl' }),
+      this.securityAudits.createIndex(
+        { createdAt: 1 },
+        {
+          expireAfterSeconds: this.auditRetentionDays * 86400,
+          name: 'security_audit_retention_ttl',
+        },
+      ),
+      this.securityAudits.createIndex(
+        { code: 1, createdAt: -1 },
+        { name: 'security_code_time' },
+      ),
     ]);
+  }
+
+  async consumeNonce(nonce: string, expiresAt: Date): Promise<boolean> {
+    try {
+      await this.nonces.insertOne({ _id: nonce, expiresAt });
+      return true;
+    } catch (error) {
+      if (error instanceof MongoServerError && error.code === 11000) return false;
+      throw error;
+    }
+  }
+
+  async recordSecurityAudit(audit: SecurityAudit): Promise<void> {
+    await this.securityAudits.insertOne(audit);
   }
 
   async ping(): Promise<void> {

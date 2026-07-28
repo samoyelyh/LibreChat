@@ -5,7 +5,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { canUseServer, canUseTool, filterToolsResult, permissionGroupForTool } from './policy.js';
 import { structureToolCallBody } from './structured-result.js';
 import { responseHeaders, type SellerSpriteClient } from './upstream.js';
-import type { CallAudit, VerifiedActor } from './types.js';
+import type { CallAudit, RateLimitDecision, VerifiedActor } from './types.js';
 
 interface JsonRpcRequest {
   jsonrpc?: string;
@@ -21,6 +21,7 @@ interface ToolCall {
 
 export interface AuditRecorder {
   recordAudits(audits: CallAudit[]): Promise<void>;
+  consumeToolRateLimit(userId: string, tool: string): Promise<RateLimitDecision>;
 }
 
 function jsonRpcRequests(body: unknown): JsonRpcRequest[] {
@@ -200,6 +201,35 @@ export async function proxyMcp(input: {
       jsonrpc: '2.0',
       id: denied[0]?.id ?? null,
       error: { code: -32003, message: 'SellerSprite tool is not authorized' },
+    });
+    return;
+  }
+
+  const decisions = await Promise.all(
+    calls.map(async (call) => ({
+      call,
+      decision: await audits.consumeToolRateLimit(actor.userId, call.tool),
+    })),
+  );
+  const limited = decisions.find(({ decision }) => !decision.allowed);
+  if (limited) {
+    reply.header('retry-after', String(limited.decision.retryAfterSeconds));
+    reply.header('x-ratelimit-limit', String(limited.decision.limit));
+    reply.header('x-ratelimit-remaining', String(limited.decision.remaining));
+    await audits.recordAudits([
+      auditFor(actor, limited.call, {
+        requestId,
+        allowed: true,
+        success: false,
+        status: 429,
+        elapsedMs: Date.now() - started,
+        errorCode: 'tool_rate_limited',
+      }),
+    ]);
+    reply.code(429).send({
+      jsonrpc: '2.0',
+      id: limited.call.id ?? null,
+      error: { code: -32029, message: 'SellerSprite tool rate limit exceeded' },
     });
     return;
   }

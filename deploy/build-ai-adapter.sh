@@ -6,7 +6,7 @@ require_runtime
 
 context="$ROOT_DIR/services/ai-quota-adapter"
 require_file "$context/Dockerfile"
-tag="woda/ai-quota-adapter:phase5-quota"
+tag="woda/ai-quota-adapter:phase8-security"
 docker build --pull=false --tag "$tag" "$context"
 image_id=$(docker image inspect --format '{{.Id}}' "$tag")
 [[ "$image_id" =~ ^sha256:[0-9a-f]{64}$ ]] || {
@@ -20,4 +20,4 @@ else
   printf 'AI_ADAPTER_IMAGE=%s\n' "$image_id" >> "$ENV_FILE"
 fi
 chmod 0600 "$ENV_FILE"
-printf 'Adapter image built and pinned by local image ID.\n'
+printf 'AI Adapter Phase 8 security image built and pinned by local image ID.\n'

@@ -1,14 +1,8 @@
-import { timingSafeEqual } from 'node:crypto';
 import { jwtVerify } from 'jose';
 import type { FastifyRequest } from 'fastify';
 import { AdapterError } from './errors.js';
+import { verifySignedRequest } from './security.js';
 import type { InternalActor } from './types.js';
-
-function safeEqual(left: string, right: string): boolean {
-  const leftBuffer = Buffer.from(left);
-  const rightBuffer = Buffer.from(right);
-  return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
-}
 
 function header(request: FastifyRequest, name: string): string {
   const value = request.headers[name];
@@ -19,10 +13,14 @@ function validResolvedValue(value: string): boolean {
   return value.length > 0 && !value.includes('{{') && !value.includes('}}');
 }
 
-export function authenticateInternalRequest(request: FastifyRequest, internalKey: string): InternalActor {
-  const suppliedKey = header(request, 'x-adapter-internal-key');
-  if (!safeEqual(suppliedKey, internalKey)) {
-    throw new AdapterError(401, 'invalid_internal_auth', 'Invalid adapter authentication');
+export function authenticateInternalRequest(
+  request: FastifyRequest,
+  internalKey: string,
+  toleranceMs: number,
+): { actor: InternalActor; nonce: string; expiresAt: Date } {
+  const signature = verifySignedRequest(request, internalKey, toleranceMs);
+  if (!signature.ok) {
+    throw new AdapterError(401, signature.code, 'Invalid adapter request signature');
   }
   const userId = header(request, 'x-librechat-user-id').trim();
   const email = header(request, 'x-librechat-user-email').trim().toLowerCase();
@@ -34,7 +32,7 @@ export function authenticateInternalRequest(request: FastifyRequest, internalKey
   const messageId = header(request, 'x-librechat-message-id').trim();
   if (validResolvedValue(conversationId)) actor.conversationId = conversationId;
   if (validResolvedValue(messageId)) actor.messageId = messageId;
-  return actor;
+  return { actor, nonce: signature.nonce, expiresAt: signature.expiresAt };
 }
 
 export async function authenticateUserJwt(request: FastifyRequest, jwtSecret: string): Promise<InternalActor> {

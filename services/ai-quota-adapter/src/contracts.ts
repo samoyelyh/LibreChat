@@ -12,6 +12,7 @@ import type {
   QuotaPolicy,
   SafeMapping,
   TokenUsage,
+  SecurityAudit,
 } from './types.js';
 
 export interface MappingStore {
@@ -32,6 +33,8 @@ export interface AccountStore extends MappingStore {
   listPolicies(): Promise<QuotaPolicy[]>;
   upsertPolicy(input: PolicyInput): Promise<QuotaPolicy>;
   recordProvisioningAudit(audit: ProvisioningAudit): Promise<void>;
+  consumeNonce(nonce: string, expiresAt: Date): Promise<boolean>;
+  recordSecurityAudit(audit: SecurityAudit): Promise<void>;
 }
 
 export interface AuditStore {

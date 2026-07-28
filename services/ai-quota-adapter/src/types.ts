@@ -202,3 +202,13 @@ export interface NewApiLog {
   type?: number;
   [key: string]: unknown;
 }
+
+export interface SecurityAudit {
+  requestId: string;
+  sourceIp: string;
+  method: string;
+  path: string;
+  outcome: 'denied';
+  code: string;
+  createdAt: Date;
+}

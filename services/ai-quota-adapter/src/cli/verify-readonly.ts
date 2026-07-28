@@ -1,6 +1,7 @@
 import { SignJWT } from 'jose';
 import { loadConfig } from '../config.js';
 import { MongoStores } from '../database.js';
+import { createSignedHeaders } from '../security.js';
 
 const config = loadConfig();
 const stores = new MongoStores(config.mongoUri, config.auditRetentionDays);
@@ -11,11 +12,16 @@ try {
   if (!mapping) throw new Error('No active mapping is available');
 
   const base = `http://127.0.0.1:${config.port}`;
-  const internalHeaders = {
-    'X-Adapter-Internal-Key': config.internalKey,
+  const actorHeaders = {
     'X-LibreChat-User-ID': mapping.librechatUserId,
     'X-LibreChat-User-Email': mapping.librechatEmail,
   };
+  const internalHeaders = createSignedHeaders({
+    secret: config.internalKey,
+    url: `${base}/v1/models`,
+    method: 'GET',
+    actorHeaders,
+  });
   const modelsResponse = await fetch(`${base}/v1/models`, { headers: internalHeaders });
   if (!modelsResponse.ok) throw new Error(`Adapter model list failed: HTTP ${modelsResponse.status}`);
   const models = (await modelsResponse.json()) as { data?: Array<{ id?: string }> };

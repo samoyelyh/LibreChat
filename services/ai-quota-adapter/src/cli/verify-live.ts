@@ -1,5 +1,6 @@
 import { loadConfig } from '../config.js';
 import { MongoStores } from '../database.js';
+import { createSignedHeaders } from '../security.js';
 
 const config = loadConfig();
 if (!config.runBillableTests) throw new Error('Set RUN_BILLABLE_PHASE2_TESTS=true for the one-time live test');
@@ -11,36 +12,60 @@ try {
   if (!mapping) throw new Error('No active mapping is available');
   const model = mapping.allowedModels.includes(config.testModel) ? config.testModel : mapping.allowedModels[0];
   if (!model) throw new Error('The active mapping has no allowed model');
-  const headers = {
+  const actorHeaders = {
     'Content-Type': 'application/json',
-    'X-Adapter-Internal-Key': config.internalKey,
     'X-LibreChat-User-ID': mapping.librechatUserId,
     'X-LibreChat-User-Email': mapping.librechatEmail,
   };
   const base = `http://127.0.0.1:${config.port}`;
-  const modelsResponse = await fetch(`${base}/v1/models`, { headers });
+  const modelsResponse = await fetch(`${base}/v1/models`, {
+    headers: createSignedHeaders({
+      secret: config.internalKey,
+      url: `${base}/v1/models`,
+      method: 'GET',
+      actorHeaders,
+    }),
+  });
   if (!modelsResponse.ok) throw new Error(`Adapter model list failed: HTTP ${modelsResponse.status}`);
   const models = (await modelsResponse.json()) as { data?: Array<{ id?: string }> };
   if (!models.data?.some((item) => item.id === model)) throw new Error('Mapped test model is missing');
 
+  const nonStreamBody = JSON.stringify({
+    model,
+    messages: [{ role: 'user', content: 'Reply only: OK' }],
+    max_tokens: 4,
+  });
   const nonStream = await fetch(`${base}/v1/chat/completions`, {
     method: 'POST',
-    headers,
-    body: JSON.stringify({ model, messages: [{ role: 'user', content: 'Reply only: OK' }], max_tokens: 4 }),
+    headers: createSignedHeaders({
+      secret: config.internalKey,
+      url: `${base}/v1/chat/completions`,
+      method: 'POST',
+      bodyText: nonStreamBody,
+      actorHeaders,
+    }),
+    body: nonStreamBody,
   });
   if (!nonStream.ok) throw new Error(`Non-stream request failed: HTTP ${nonStream.status}`);
   const nonStreamJson = (await nonStream.json()) as { choices?: unknown[] };
   if (!Array.isArray(nonStreamJson.choices)) throw new Error('Non-stream response has no choices');
 
+  const streamBody = JSON.stringify({
+    model,
+    messages: [{ role: 'user', content: 'Reply only: OK' }],
+    max_tokens: 4,
+    stream: true,
+  });
   const stream = await fetch(`${base}/v1/chat/completions`, {
     method: 'POST',
-    headers,
-    body: JSON.stringify({
-      model,
-      messages: [{ role: 'user', content: 'Reply only: OK' }],
-      max_tokens: 4,
-      stream: true,
+    headers: createSignedHeaders({
+      secret: config.internalKey,
+      url: `${base}/v1/chat/completions`,
+      method: 'POST',
+      bodyText: streamBody,
+      actorHeaders,
     }),
+    body: streamBody,
   });
   const streamText = await stream.text();
   if (!stream.ok || !streamText.includes('data:') || !streamText.includes('[DONE]')) {

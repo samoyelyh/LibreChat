@@ -4,6 +4,7 @@ const {
   lingxingReadTools,
   sellerSpriteTools,
 } = require('/app/deploy/phase6-tool-catalog.js');
+const { signedHeaders } = require('/app/deploy/gateway-signing.js');
 
 function parsePayload(text) {
   const dataLine = text
@@ -14,12 +15,11 @@ function parsePayload(text) {
   return JSON.parse(dataLine || text);
 }
 
-function headers(internalKey, user, sessionId, protocolVersion) {
+function headers(user, sessionId, protocolVersion) {
   return {
     Accept: 'application/json, text/event-stream',
     'Content-Type': 'application/json',
     'MCP-Protocol-Version': protocolVersion,
-    'X-MCP-Gateway-Key': internalKey,
     'X-LibreChat-User-ID': String(user._id),
     'X-LibreChat-User-Email': user.email,
     'X-LibreChat-User-Role': user.role,
@@ -31,19 +31,26 @@ async function listTools({ name, url, internalKey, user }) {
   let sessionId = null;
   let protocolVersion = '2025-06-18';
   try {
+    const initializeBody = JSON.stringify({
+      jsonrpc: '2.0',
+      id: `phase6-${name}-initialize`,
+      method: 'initialize',
+      params: {
+        protocolVersion,
+        capabilities: {},
+        clientInfo: { name: 'woda-phase6-live-tools', version: '1.0.0' },
+      },
+    });
     const initialized = await fetch(url, {
       method: 'POST',
-      headers: headers(internalKey, user, null, protocolVersion),
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: `phase6-${name}-initialize`,
-        method: 'initialize',
-        params: {
-          protocolVersion,
-          capabilities: {},
-          clientInfo: { name: 'woda-phase6-live-tools', version: '1.0.0' },
-        },
+      headers: signedHeaders({
+        secret: internalKey,
+        url,
+        method: 'POST',
+        body: initializeBody,
+        headers: headers(user, null, protocolVersion),
       }),
+      body: initializeBody,
     });
     const initializedText = await initialized.text();
     if (!initialized.ok) throw new Error(`${name} initialize HTTP ${initialized.status}`);
@@ -52,21 +59,38 @@ async function listTools({ name, url, internalKey, user }) {
     sessionId = initialized.headers.get('mcp-session-id');
     protocolVersion = initializedPayload.result?.protocolVersion ?? protocolVersion;
 
+    const initializedNotification = JSON.stringify({
+      jsonrpc: '2.0',
+      method: 'notifications/initialized',
+    });
     await fetch(url, {
       method: 'POST',
-      headers: headers(internalKey, user, sessionId, protocolVersion),
-      body: JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }),
+      headers: signedHeaders({
+        secret: internalKey,
+        url,
+        method: 'POST',
+        body: initializedNotification,
+        headers: headers(user, sessionId, protocolVersion),
+      }),
+      body: initializedNotification,
     }).then((response) => response.arrayBuffer());
 
+    const listBody = JSON.stringify({
+      jsonrpc: '2.0',
+      id: `phase6-${name}-tools`,
+      method: 'tools/list',
+      params: {},
+    });
     const response = await fetch(url, {
       method: 'POST',
-      headers: headers(internalKey, user, sessionId, protocolVersion),
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: `phase6-${name}-tools`,
-        method: 'tools/list',
-        params: {},
+      headers: signedHeaders({
+        secret: internalKey,
+        url,
+        method: 'POST',
+        body: listBody,
+        headers: headers(user, sessionId, protocolVersion),
       }),
+      body: listBody,
     });
     const responseText = await response.text();
     if (!response.ok) throw new Error(`${name} tools/list HTTP ${response.status}`);
@@ -81,7 +105,12 @@ async function listTools({ name, url, internalKey, user }) {
     if (sessionId) {
       await fetch(url, {
         method: 'DELETE',
-        headers: headers(internalKey, user, sessionId, protocolVersion),
+        headers: signedHeaders({
+          secret: internalKey,
+          url,
+          method: 'DELETE',
+          headers: headers(user, sessionId, protocolVersion),
+        }),
       }).catch(() => undefined);
     }
   }

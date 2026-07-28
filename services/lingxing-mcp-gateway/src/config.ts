@@ -13,6 +13,13 @@ const schema = z.object({
   LINGXING_MCP_DB: z.string().default('lingxing_mcp_gateway'),
   LINGXING_MCP_TIMEOUT_MS: z.coerce.number().int().min(1000).max(300000).default(120000),
   LINGXING_MCP_AUDIT_RETENTION_DAYS: z.coerce.number().int().min(30).max(3650).default(365),
+  LINGXING_MCP_SIGNATURE_TOLERANCE_MS: z.coerce
+    .number()
+    .int()
+    .min(5000)
+    .max(300000)
+    .default(30000),
+  LINGXING_MCP_REQUESTS_PER_MINUTE: z.coerce.number().int().min(1).max(10000).default(60),
 });
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): GatewayConfig {
@@ -33,5 +40,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): GatewayConfig 
     gatewayDatabase: parsed.LINGXING_MCP_DB,
     requestTimeoutMs: parsed.LINGXING_MCP_TIMEOUT_MS,
     auditRetentionDays: parsed.LINGXING_MCP_AUDIT_RETENTION_DAYS,
+    signatureToleranceMs: parsed.LINGXING_MCP_SIGNATURE_TOLERANCE_MS,
+    requestsPerMinute: parsed.LINGXING_MCP_REQUESTS_PER_MINUTE,
   };
 }

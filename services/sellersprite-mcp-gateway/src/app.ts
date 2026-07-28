@@ -3,10 +3,18 @@ import Fastify, {
   type FastifyReply,
   type FastifyRequest,
 } from 'fastify';
-import { actorHeaders, hasInternalKey } from './auth.js';
+import { actorHeaders } from './auth.js';
 import { proxyMcp } from './proxy.js';
+import { verifySignedRequest } from './security.js';
 import type { SellerSpriteClient } from './upstream.js';
-import type { CallAudit, GatewayConfig, SafeStatus, VerifiedActor } from './types.js';
+import type {
+  CallAudit,
+  GatewayConfig,
+  RateLimitDecision,
+  SafeStatus,
+  SecurityAudit,
+  VerifiedActor,
+} from './types.js';
 
 export interface AppStores {
   ping(): Promise<void>;
@@ -20,6 +28,9 @@ export interface AppStores {
   }): Promise<void>;
   status(): Promise<SafeStatus>;
   recentAudits(limit: number): Promise<unknown[]>;
+  consumeNonce(nonce: string, expiresAt: Date): Promise<boolean>;
+  recordSecurityAudit(audit: SecurityAudit): Promise<void>;
+  consumeToolRateLimit(userId: string, tool: string): Promise<RateLimitDecision>;
 }
 
 export function buildApp(
@@ -28,6 +39,7 @@ export function buildApp(
   upstream: SellerSpriteClient,
 ): FastifyInstance {
   const app = Fastify({
+    trustProxy: true,
     logger: {
       level: process.env.LOG_LEVEL || 'info',
       redact: {
@@ -36,6 +48,8 @@ export function buildApp(
           'req.headers.x-mcp-gateway-key',
           'headers.secret-key',
           'headers.x-mcp-gateway-key',
+          'req.headers.x-woda-signature',
+          'headers.x-woda-signature',
           'config.upstreamSecret',
         ],
         censor: '[REDACTED]',
@@ -55,9 +69,32 @@ export function buildApp(
   });
 
   const authenticateInternal = async (request: FastifyRequest, reply: FastifyReply) => {
-    if (!hasInternalKey(request, config.internalKey)) {
-      return reply.code(401).send({ error: { code: 'invalid_internal_auth', message: 'Unauthorized' } });
+    const result = verifySignedRequest(
+      request,
+      config.internalKey,
+      config.signatureToleranceMs,
+    );
+    const deny = async (code: string) => {
+      await stores
+        .recordSecurityAudit({
+          requestId: request.id,
+          sourceIp: request.ip,
+          method: request.method,
+          path: request.url.split('?')[0] ?? request.url,
+          outcome: 'denied',
+          code,
+          createdAt: new Date(),
+        })
+        .catch(() => undefined);
+      return reply.code(401).send({ error: { code, message: 'Unauthorized' } });
+    };
+    if (!result.ok) {
+      return deny(result.code);
     }
+    if (!(await stores.consumeNonce(result.nonce, result.expiresAt))) {
+      return deny('replayed_request');
+    }
+    reply.header('x-woda-security-request-id', request.id);
   };
 
   app.register(

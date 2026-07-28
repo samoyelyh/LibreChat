@@ -90,6 +90,8 @@ services:
       - ./seed-phase6-agents.js:/app/deploy/seed-phase6-agents.js:ro
       - ./verify-phase6-live-tools.js:/app/deploy/verify-phase6-live-tools.js:ro
       - ./verify-phase6-api.js:/app/deploy/verify-phase6-api.js:ro
+      - ./gateway-signing.js:/app/deploy/gateway-signing.js:ro
+      - ./verify-phase8-security.js:/app/deploy/verify-phase8-security.js:ro
       - ./verify-phase5-api.js:/app/deploy/verify-phase5-api.js:ro
       - ./verify-phase5-quota-api.js:/app/deploy/verify-phase5-quota-api.js:ro
       - uploads:/app/uploads
@@ -97,6 +99,7 @@ services:
     networks:
       - edge
       - backend
+      - mcp
     healthcheck:
       test:
         - CMD-SHELL
@@ -217,6 +220,7 @@ services:
       AI_ADAPTER_REQUESTS_PER_MINUTE: ${AI_ADAPTER_REQUESTS_PER_MINUTE:-30}
       AI_ADAPTER_MAX_CONCURRENT_REQUESTS: ${AI_ADAPTER_MAX_CONCURRENT_REQUESTS:-2}
       AI_ADAPTER_AUDIT_RETENTION_DAYS: ${AI_ADAPTER_AUDIT_RETENTION_DAYS:-90}
+      AI_ADAPTER_SIGNATURE_TOLERANCE_MS: ${AI_ADAPTER_SIGNATURE_TOLERANCE_MS:-30000}
       AI_DEFAULT_USER_QUOTA: ${AI_DEFAULT_USER_QUOTA:-0}
       AI_DEFAULT_ALLOWED_MODELS: ${AI_DEFAULT_ALLOWED_MODELS:-kimi-k2}
       AI_ADAPTER_TEST_MODEL: ${AI_ADAPTER_TEST_MODEL:-kimi-k2}
@@ -260,11 +264,16 @@ services:
       SELLERSPRITE_MCP_TIMEOUT_MS: ${SELLERSPRITE_MCP_TIMEOUT_MS:-120000}
       SELLERSPRITE_MCP_AUDIT_RETENTION_DAYS: ${SELLERSPRITE_MCP_AUDIT_RETENTION_DAYS:-365}
       SELLERSPRITE_MCP_MONTHLY_LIMIT: ${SELLERSPRITE_MCP_MONTHLY_LIMIT:-0}
+      SELLERSPRITE_MCP_SIGNATURE_TOLERANCE_MS: ${SELLERSPRITE_MCP_SIGNATURE_TOLERANCE_MS:-30000}
+      SELLERSPRITE_MCP_REQUESTS_PER_MINUTE: ${SELLERSPRITE_MCP_REQUESTS_PER_MINUTE:-60}
       NO_PROXY: localhost,127.0.0.1,::1,mongodb
       no_proxy: localhost,127.0.0.1,::1,mongodb
     networks:
-      - edge
       - backend
+      - mcp
+    cap_drop:
+      - ALL
+    pids_limit: 256
     healthcheck:
       test:
         - CMD-SHELL
@@ -298,12 +307,17 @@ services:
       LINGXING_MCP_DB: ${LINGXING_MCP_DB:-lingxing_mcp_gateway}
       LINGXING_MCP_TIMEOUT_MS: ${LINGXING_MCP_TIMEOUT_MS:-120000}
       LINGXING_MCP_AUDIT_RETENTION_DAYS: ${LINGXING_MCP_AUDIT_RETENTION_DAYS:-365}
+      LINGXING_MCP_SIGNATURE_TOLERANCE_MS: ${LINGXING_MCP_SIGNATURE_TOLERANCE_MS:-30000}
+      LINGXING_MCP_REQUESTS_PER_MINUTE: ${LINGXING_MCP_REQUESTS_PER_MINUTE:-60}
       JWT_SECRET: ${JWT_SECRET}
       NO_PROXY: localhost,127.0.0.1,::1,mongodb
       no_proxy: localhost,127.0.0.1,::1,mongodb
     networks:
-      - edge
       - backend
+      - mcp
+    cap_drop:
+      - ALL
+    pids_limit: 256
     healthcheck:
       test:
         - CMD-SHELL
@@ -395,6 +409,8 @@ services:
 networks:
   edge:
   backend:
+    internal: true
+  mcp:
     internal: true
 
 volumes:
