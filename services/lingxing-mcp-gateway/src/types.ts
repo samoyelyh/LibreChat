@@ -21,6 +21,7 @@ export interface GatewayConfig {
   auditRetentionDays: number;
   signatureToleranceMs: number;
   requestsPerMinute: number;
+  toolIntervalMs: number;
 }
 
 export interface ActorHeaders {
@@ -142,4 +143,5 @@ export interface RateLimitDecision {
   limit: number;
   remaining: number;
   retryAfterSeconds: number;
+  window: 'second' | 'minute';
 }

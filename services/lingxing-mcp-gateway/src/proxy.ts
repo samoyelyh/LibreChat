@@ -23,6 +23,30 @@ export interface ProxyStores {
   consumeToolRateLimit(userId: string, tool: string): Promise<RateLimitDecision>;
 }
 
+type Delay = (durationMs: number) => Promise<void>;
+
+function delay(durationMs: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, durationMs));
+}
+
+async function consumeRateLimit(
+  stores: ProxyStores,
+  userId: string,
+  tool: string,
+  wait: Delay = delay,
+): Promise<RateLimitDecision> {
+  let decision = await stores.consumeToolRateLimit(userId, tool);
+  for (
+    let attempt = 0;
+    attempt < 2 && !decision.allowed && decision.window === 'second';
+    attempt++
+  ) {
+    await wait(decision.retryAfterSeconds * 1000);
+    decision = await stores.consumeToolRateLimit(userId, tool);
+  }
+  return decision;
+}
+
 function requests(body: unknown): JsonRpcRequest[] {
   if (Array.isArray(body)) {
     return body.filter((item): item is JsonRpcRequest => item != null && typeof item === 'object');
@@ -32,7 +56,9 @@ function requests(body: unknown): JsonRpcRequest[] {
 
 function calls(body: unknown): ToolCall[] {
   return requests(body)
-    .filter((request) => request.method === 'tools/call' && typeof request.params?.name === 'string')
+    .filter(
+      (request) => request.method === 'tools/call' && typeof request.params?.name === 'string',
+    )
     .map((request) => ({
       ...(request.id !== undefined ? { id: request.id } : {}),
       tool: request.params!.name!,
@@ -105,7 +131,13 @@ function audit(
   };
 }
 
-function jsonRpcError(reply: FastifyReply, status: number, id: ToolCall['id'], code: number, message: string) {
+function jsonRpcError(
+  reply: FastifyReply,
+  status: number,
+  id: ToolCall['id'],
+  code: number,
+  message: string,
+) {
   return reply.code(status).send({ jsonrpc: '2.0', id: id ?? null, error: { code, message } });
 }
 
@@ -141,7 +173,7 @@ export async function proxyMcp(input: {
   const decisions = await Promise.all(
     toolCalls.map(async (call) => ({
       call,
-      decision: await stores.consumeToolRateLimit(actor.userId, call.tool),
+      decision: await consumeRateLimit(stores, actor.userId, call.tool),
     })),
   );
   const limited = decisions.find(({ decision }) => !decision.allowed);
@@ -149,6 +181,7 @@ export async function proxyMcp(input: {
     reply.header('retry-after', String(limited.decision.retryAfterSeconds));
     reply.header('x-ratelimit-limit', String(limited.decision.limit));
     reply.header('x-ratelimit-remaining', String(limited.decision.remaining));
+    reply.header('x-ratelimit-window', limited.decision.window);
     await stores.recordCallAudits([
       audit(actor, limited.call, {
         requestId,
@@ -179,7 +212,13 @@ export async function proxyMcp(input: {
         ),
       );
     }
-    jsonRpcError(reply, 403, toolCalls[0]?.id, -32001, '请先在“设置 → 我的数据源 → 领星 ERP”配置并测试密钥');
+    jsonRpcError(
+      reply,
+      403,
+      toolCalls[0]?.id,
+      -32001,
+      '请先在“设置 → 我的数据源 → 领星 ERP”配置并测试密钥',
+    );
     return;
   }
 
@@ -196,6 +235,8 @@ export async function proxyMcp(input: {
       headers: request.headers,
       ...(method === 'POST' ? { body: JSON.stringify(request.body) } : {}),
       signal: controller.signal,
+      retryRateLimit:
+        method === 'POST' && (toolCalls.length > 0 || includesMethod(request.body, 'tools/list')),
     });
     status = response.status;
     const contentType = response.headers.get('content-type') ?? 'application/json';
@@ -262,4 +303,4 @@ export async function proxyMcp(input: {
   }
 }
 
-export const testing = { calls, filterToolsText };
+export const testing = { calls, consumeRateLimit, filterToolsText };

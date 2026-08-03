@@ -7,19 +7,18 @@ const schema = z.object({
   LINGXING_MCP_INTERNAL_KEY: z.string().min(32),
   JWT_SECRET: z.string().min(32),
   LINGXING_MCP_ENCRYPTION_KEY: z.string().min(1),
-  LINGXING_MCP_URL: z.string().url().refine((value) => value.startsWith('https://')),
+  LINGXING_MCP_URL: z
+    .string()
+    .url()
+    .refine((value) => value.startsWith('https://')),
   LINGXING_MCP_MONGO_URI: z.string().min(1),
   LINGXING_MCP_LIBRECHAT_DB: z.string().default('LibreChat'),
   LINGXING_MCP_DB: z.string().default('lingxing_mcp_gateway'),
   LINGXING_MCP_TIMEOUT_MS: z.coerce.number().int().min(1000).max(300000).default(120000),
   LINGXING_MCP_AUDIT_RETENTION_DAYS: z.coerce.number().int().min(30).max(3650).default(365),
-  LINGXING_MCP_SIGNATURE_TOLERANCE_MS: z.coerce
-    .number()
-    .int()
-    .min(5000)
-    .max(300000)
-    .default(30000),
+  LINGXING_MCP_SIGNATURE_TOLERANCE_MS: z.coerce.number().int().min(5000).max(300000).default(30000),
   LINGXING_MCP_REQUESTS_PER_MINUTE: z.coerce.number().int().min(1).max(10000).default(60),
+  LINGXING_MCP_TOOL_INTERVAL_MS: z.coerce.number().int().min(1000).max(60000).default(1100),
 });
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): GatewayConfig {
@@ -42,5 +41,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): GatewayConfig 
     auditRetentionDays: parsed.LINGXING_MCP_AUDIT_RETENTION_DAYS,
     signatureToleranceMs: parsed.LINGXING_MCP_SIGNATURE_TOLERANCE_MS,
     requestsPerMinute: parsed.LINGXING_MCP_REQUESTS_PER_MINUTE,
+    toolIntervalMs: parsed.LINGXING_MCP_TOOL_INTERVAL_MS,
   };
 }

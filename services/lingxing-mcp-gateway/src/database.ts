@@ -1,10 +1,4 @@
-import {
-  MongoClient,
-  MongoServerError,
-  ObjectId,
-  type Collection,
-  type WithId,
-} from 'mongodb';
+import { MongoClient, MongoServerError, ObjectId, type Collection, type WithId } from 'mongodb';
 import { decryptSecret, encryptSecret, fingerprintLast4 } from './crypto.js';
 import { groupsForIdentity } from './policy.js';
 import type {
@@ -47,6 +41,7 @@ interface RateLimitDocument {
   _id: string;
   count: number;
   expiresAt: Date;
+  nextAllowedAt?: Date;
 }
 
 export interface UserSummary {
@@ -64,8 +59,8 @@ function statusView(value: CredentialDocument | null): CredentialStatusView {
     configured,
     provider: 'lingxing',
     status: value?.status ?? 'missing',
-    configuredBy: configured ? value?.configuredBy ?? null : null,
-    fingerprintLast4: configured ? value?.fingerprintLast4 ?? null : null,
+    configuredBy: configured ? (value?.configuredBy ?? null) : null,
+    fingerprintLast4: configured ? (value?.fingerprintLast4 ?? null) : null,
     createdAt: value?.createdAt ?? null,
     updatedAt: value?.updatedAt ?? null,
     lastTestedAt: value?.lastTestedAt ?? null,
@@ -133,10 +128,7 @@ export class MongoStores {
         { createdAt: 1 },
         { name: 'security_audit_ttl', expireAfterSeconds: ttl },
       ),
-      this.securityAudits.createIndex(
-        { code: 1, createdAt: -1 },
-        { name: 'security_code_time' },
-      ),
+      this.securityAudits.createIndex({ code: 1, createdAt: -1 }, { name: 'security_code_time' }),
     ]);
   }
 
@@ -159,6 +151,9 @@ export class MongoStores {
     tool: string,
     now = new Date(),
   ): Promise<RateLimitDecision> {
+    const pace = await this.consumeToolPace(userId, tool, now);
+    if (!pace.allowed) return pace;
+
     const bucketStart = Math.floor(now.getTime() / 60000) * 60000;
     const expiresAt = new Date(bucketStart + 120000);
     const id = `${userId}:${tool}:${bucketStart}`;
@@ -183,6 +178,51 @@ export class MongoStores {
       limit: this.config.requestsPerMinute,
       remaining: Math.max(0, this.config.requestsPerMinute - count),
       retryAfterSeconds: Math.max(1, Math.ceil((bucketStart + 60000 - now.getTime()) / 1000)),
+      window: 'minute',
+    };
+  }
+
+  private async consumeToolPace(
+    userId: string,
+    tool: string,
+    now: Date,
+  ): Promise<RateLimitDecision> {
+    const id = `pace:${userId}:${tool}`;
+    const nextAllowedAt = new Date(now.getTime() + this.config.toolIntervalMs);
+    const expiresAt = new Date(nextAllowedAt.getTime() + 120000);
+    try {
+      const document = await this.rateLimits.findOneAndUpdate(
+        {
+          _id: id,
+          $or: [{ nextAllowedAt: { $lte: now } }, { nextAllowedAt: { $exists: false } }],
+        },
+        {
+          $set: { nextAllowedAt, expiresAt },
+          $setOnInsert: { count: 0 },
+        },
+        { upsert: true, returnDocument: 'after' },
+      );
+      if (document) {
+        return {
+          allowed: true,
+          limit: 1,
+          remaining: 0,
+          retryAfterSeconds: 0,
+          window: 'second',
+        };
+      }
+    } catch (error) {
+      if (!(error instanceof MongoServerError) || error.code !== 11000) throw error;
+    }
+
+    const document = await this.rateLimits.findOne({ _id: id });
+    const retryAt = document?.nextAllowedAt?.getTime() ?? nextAllowedAt.getTime();
+    return {
+      allowed: false,
+      limit: 1,
+      remaining: 0,
+      retryAfterSeconds: Math.max(1, Math.ceil((retryAt - now.getTime()) / 1000)),
+      window: 'second',
     };
   }
 

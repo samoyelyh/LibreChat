@@ -14,6 +14,25 @@ const responseHeaderNames = [
   'mcp-protocol-version',
   'retry-after',
 ];
+const defaultRetryDelayMs = 1000;
+const maximumRetryDelayMs = 5000;
+
+type Wait = (durationMs: number) => Promise<void>;
+
+function wait(durationMs: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, durationMs));
+}
+
+function retryDelayMs(response: Response, now = Date.now()): number {
+  const value = response.headers.get('retry-after')?.trim();
+  if (!value) return defaultRetryDelayMs;
+  const seconds = Number(value);
+  const requested = Number.isFinite(seconds)
+    ? Math.max(0, seconds * 1000)
+    : Math.max(0, Date.parse(value) - now);
+  if (!Number.isFinite(requested)) return defaultRetryDelayMs;
+  return Math.min(maximumRetryDelayMs, requested);
+}
 
 function requestHeaders(
   incoming: Record<string, string | string[] | undefined>,
@@ -54,7 +73,10 @@ function parseMcpPayload(text: string): {
 }
 
 export class LingxingClient {
-  constructor(private readonly config: GatewayConfig) {}
+  constructor(
+    private readonly config: GatewayConfig,
+    private readonly delay: Wait = wait,
+  ) {}
 
   async relay(input: {
     secret: string;
@@ -62,15 +84,22 @@ export class LingxingClient {
     headers: Record<string, string | string[] | undefined>;
     body?: string;
     signal?: AbortSignal;
+    retryRateLimit?: boolean;
   }): Promise<Response> {
     const timeout = AbortSignal.timeout(this.config.requestTimeoutMs);
     const signal = input.signal ? AbortSignal.any([input.signal, timeout]) : timeout;
-    return fetch(this.config.upstreamUrl, {
-      method: input.method,
-      headers: requestHeaders(input.headers, input.secret),
-      ...(input.body != null ? { body: input.body } : {}),
-      signal,
-    });
+    const send = () =>
+      fetch(this.config.upstreamUrl, {
+        method: input.method,
+        headers: requestHeaders(input.headers, input.secret),
+        ...(input.body != null ? { body: input.body } : {}),
+        signal,
+      });
+    const response = await send();
+    if (!input.retryRateLimit || response.status !== 429) return response;
+    await response.body?.cancel().catch(() => undefined);
+    await this.delay(retryDelayMs(response));
+    return send();
   }
 
   async connectionTest(secret: string): Promise<ConnectionTestResult> {
@@ -95,18 +124,26 @@ export class LingxingClient {
             clientInfo: { name: 'woda-lingxing-connection-test', version: '1.0.0' },
           },
         }),
+        retryRateLimit: true,
       });
       sessionId = initialized.headers.get('mcp-session-id');
       if (!initialized.ok) {
         return {
           ok: false,
-          code: initialized.status === 401 || initialized.status === 403 ? 'invalid_key' : 'upstream_http',
+          code:
+            initialized.status === 401 || initialized.status === 403
+              ? 'invalid_key'
+              : 'upstream_http',
           message: `initialize HTTP ${initialized.status}`,
         };
       }
       const payload = parseMcpPayload(await initialized.text());
       if (payload.error) {
-        return { ok: false, code: 'mcp_initialize_error', message: 'initialize returned an MCP error' };
+        return {
+          ok: false,
+          code: 'mcp_initialize_error',
+          message: 'initialize returned an MCP error',
+        };
       }
       protocolVersion = payload.result?.protocolVersion ?? protocolVersion;
       await this.relay({
@@ -135,6 +172,7 @@ export class LingxingClient {
           method: 'tools/list',
           params: {},
         }),
+        retryRateLimit: true,
       });
       if (!tools.ok) {
         return { ok: false, code: 'tools_list_http', message: `tools/list HTTP ${tools.status}` };
@@ -143,7 +181,9 @@ export class LingxingClient {
       if (toolPayload.error) {
         return { ok: false, code: 'tools_list_error', message: 'tools/list returned an MCP error' };
       }
-      const toolCount = Array.isArray(toolPayload.result?.tools) ? toolPayload.result.tools.length : 0;
+      const toolCount = Array.isArray(toolPayload.result?.tools)
+        ? toolPayload.result.tools.length
+        : 0;
       return {
         ok: toolCount > 0,
         code: toolCount > 0 ? 'connected' : 'no_tools',
@@ -152,7 +192,9 @@ export class LingxingClient {
       };
     } catch (error) {
       const code =
-        error != null && typeof error === 'object' && 'code' in error ? String(error.code) : 'failed';
+        error != null && typeof error === 'object' && 'code' in error
+          ? String(error.code)
+          : 'failed';
       return { ok: false, code: 'connection_failed', message: `connection ${code}` };
     } finally {
       if (sessionId) {
@@ -165,3 +207,5 @@ export class LingxingClient {
     }
   }
 }
+
+export const testing = { retryDelayMs };

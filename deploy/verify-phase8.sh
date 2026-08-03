@@ -30,16 +30,23 @@ all_healthy() {
 }
 
 mcp_network_isolated() {
-  local seller lingxing seller_networks lingxing_networks
+  local nginx seller lingxing nginx_networks seller_networks lingxing_networks
+  nginx=$(compose ps -q nginx)
   seller=$(compose ps -q sellersprite-mcp-gateway)
   lingxing=$(compose ps -q lingxing-mcp-gateway)
   [[ "$(docker network inspect woda-cross-border-ai_mcp --format '{{.Internal}}')" == true ]]
+  [[ "$(docker network inspect woda-cross-border-ai_lingxing_control --format '{{.Internal}}')" == true ]]
   [[ "$(docker network inspect woda-cross-border-ai_sellersprite_egress --format '{{.Internal}}')" == false ]]
   [[ "$(docker network inspect woda-cross-border-ai_lingxing_egress --format '{{.Internal}}')" == false ]]
+  nginx_networks=$(docker inspect "$nginx" --format '{{json .NetworkSettings.Networks}}')
   seller_networks=$(docker inspect "$seller" --format '{{json .NetworkSettings.Networks}}')
   lingxing_networks=$(docker inspect "$lingxing" --format '{{json .NetworkSettings.Networks}}')
+  grep -q '"woda-cross-border-ai_lingxing_control"' <<<"$nginx_networks"
+  ! grep -q '"woda-cross-border-ai_mcp"' <<<"$nginx_networks"
   ! grep -q '"woda-cross-border-ai_edge"' <<<"$seller_networks"
   ! grep -q '"woda-cross-border-ai_edge"' <<<"$lingxing_networks"
+  ! grep -q '"woda-cross-border-ai_lingxing_control"' <<<"$seller_networks"
+  grep -q '"woda-cross-border-ai_lingxing_control"' <<<"$lingxing_networks"
   grep -q '"woda-cross-border-ai_sellersprite_egress"' <<<"$seller_networks"
   ! grep -q '"woda-cross-border-ai_lingxing_egress"' <<<"$seller_networks"
   grep -q '"woda-cross-border-ai_lingxing_egress"' <<<"$lingxing_networks"
@@ -85,9 +92,36 @@ if (!decision || decision.allowed || decision.limit !== limit || decision.remain
 }
 '
 
+lingxing_pace_fixture='
+const { loadConfig } = await import("/app/dist/config.js");
+const { MongoStores } = await import("/app/dist/database.js");
+const stores = new MongoStores(loadConfig());
+await stores.connect();
+const prefix = `phase8-pace-${Date.now()}`;
+const first = await stores.consumeToolRateLimit(prefix, "phase8_fixture");
+const decision = await stores.consumeToolRateLimit(prefix, "phase8_fixture");
+await stores.close();
+if (!first.allowed || decision.allowed || decision.limit !== 1 || decision.window !== "second" || decision.retryAfterSeconds < 1) {
+  process.exit(1);
+}
+'
+
+lingxing_credential_api_reachable() {
+  local status
+  status=$(curl -sS -o /tmp/phase8-lingxing-status.json -w '%{http_code}' \
+    "http://127.0.0.1:${USER_PORT:-7999}/api/lingxing/status")
+  if [[ "$status" == 401 ]] && grep -q unauthorized /tmp/phase8-lingxing-status.json; then
+    rm -f /tmp/phase8-lingxing-status.json
+    return 0
+  fi
+  rm -f /tmp/phase8-lingxing-status.json
+  return 1
+}
+
 check 'compose configuration' compose config --quiet
 check 'all containers healthy' all_healthy
 check 'MCP ingress is internal and each gateway has isolated outbound access' mcp_network_isolated
+check 'LingXing credential API is reachable and rejects anonymous access' lingxing_credential_api_reachable
 check 'LibreChat uploads and processed images use persistent volumes' librechat_file_storage_persistent
 check 'signed request, replay, stale request, and audit controls' bash -lc \
   "cd \"$DEPLOY_DIR\" && docker compose --env-file .env -f docker-compose.production.yml exec -T api node /app/deploy/verify-phase8-security.js | grep -q PHASE8_SECURITY_OK"
@@ -96,9 +130,8 @@ check 'conversation ownership isolation' bash -lc \
 check 'SellerSprite distributed rate limit' compose exec -T \
   -e RATE_LIMIT="${SELLERSPRITE_MCP_REQUESTS_PER_MINUTE:-60}" \
   sellersprite-mcp-gateway node --input-type=module -e "$rate_limit_fixture"
-check 'LingXing distributed rate limit' compose exec -T \
-  -e RATE_LIMIT="${LINGXING_MCP_REQUESTS_PER_MINUTE:-60}" \
-  lingxing-mcp-gateway node --input-type=module -e "$rate_limit_fixture"
+check 'LingXing distributed one-tool-per-second pacing' compose exec -T \
+  lingxing-mcp-gateway node --input-type=module -e "$lingxing_pace_fixture"
 check 'Phase 7 regression suite' bash -lc \
   "SKIP_EXTERNAL_MCP_CATALOGS=true \"$DEPLOY_DIR/verify-phase7.sh\" | grep -q PHASE7_VERIFY_OK"
 check 'backup integrity and secret isolation' "$DEPLOY_DIR/verify-backup.sh" "$backup_dir"
