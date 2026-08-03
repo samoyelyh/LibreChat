@@ -1970,5 +1970,18 @@
   "com_ui_ai_quota_revoke": "Revoke",
   "com_ui_ai_quota_provision_sync": "Provision / sync",
   "com_ui_ai_quota_save_apply": "Save and apply",
-  "com_ui_ai_quota_policy_count": "{{0}} quota policies configured."
+  "com_ui_ai_quota_policy_count": "{{0}} quota policies configured.",
+  "com_ui_settings_section_user_management": "User management",
+  "com_ui_admin_users_title": "Create user account",
+  "com_ui_admin_users_description": "Create a verified company login, then assign its initial role and department. Public registration remains disabled.",
+  "com_ui_admin_users_department": "Department",
+  "com_ui_admin_users_password_hint": "The initial password must contain at least {{0}} characters. It is sent only when the form is submitted and is never shown again.",
+  "com_ui_admin_users_recent": "Recent user accounts",
+  "com_ui_admin_users_success": "Account {{0}} was created successfully.",
+  "com_ui_admin_users_error_invalid": "Check the account fields and make sure both passwords match.",
+  "com_ui_admin_users_error_exists": "An account with this email address already exists.",
+  "com_ui_admin_users_error_role": "The selected role no longer exists. Refresh and choose another role.",
+  "com_ui_admin_users_error_department": "The selected department no longer exists. Refresh and choose another department.",
+  "com_ui_admin_users_error_admin_role": "System administrator accounts cannot be created from this form.",
+  "com_ui_admin_users_error_create": "The account could not be created. Please try again."
 }

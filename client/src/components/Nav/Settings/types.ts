@@ -30,6 +30,7 @@ export type SectionId =
   | 'danger'
   | 'profile'
   | 'security'
+  | 'userManagement'
   | 'dataSources'
   | 'billing'
   | 'about';
@@ -43,6 +44,7 @@ export interface SettingsContextValue {
   hasMultiConvo: boolean;
   hasPrompts: boolean;
   isLocalProvider: boolean;
+  isAdmin: boolean;
   twoFactorEnabled: boolean;
   allowAccountDeletion: boolean;
   aboutEnabled: boolean;
@@ -123,6 +125,7 @@ export const TABS: TabMeta[] = [
     sections: [
       { id: 'profile', labelKey: 'com_ui_settings_section_profile' },
       { id: 'security', labelKey: 'com_ui_settings_section_security' },
+      { id: 'userManagement', labelKey: 'com_ui_settings_section_user_management' },
       { id: 'dataSources', labelKey: 'com_ui_settings_section_data_sources' },
       { id: 'billing', labelKey: 'com_ui_settings_section_billing' },
       { id: 'danger', labelKey: 'com_ui_settings_section_danger_zone', danger: true },

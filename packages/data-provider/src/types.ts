@@ -202,6 +202,9 @@ export type TError = {
   response?: {
     data?: {
       message?: string;
+      error?: string;
+      error_code?: string;
+      fields?: Record<string, string[]>;
     };
     status?: number;
   };

@@ -1,6 +1,6 @@
 import { Types } from 'mongoose';
 import { PrincipalType, SystemRoles } from 'librechat-data-provider';
-import type { IUser, UserDeleteResult } from '@librechat/data-schemas';
+import type { IGroup, IRole, IUser, UserDeleteResult } from '@librechat/data-schemas';
 import type { Response } from 'express';
 import type { ServerRequest } from '~/types/http';
 import type { AdminUsersDeps } from './users';
@@ -32,13 +32,14 @@ function createReqRes(
   overrides: {
     params?: Record<string, string>;
     query?: Record<string, string | string[]>;
+    body?: Record<string, string>;
     user?: { _id?: Types.ObjectId; id?: string; role?: string; tenantId?: string };
   } = {},
 ) {
   const req = {
     params: overrides.params ?? {},
     query: overrides.query ?? {},
-    body: {},
+    body: overrides.body ?? {},
     user: overrides.user ?? { _id: new Types.ObjectId(), role: 'admin' },
   } as unknown as ServerRequest;
 
@@ -53,6 +54,16 @@ function createDeps(overrides: Partial<AdminUsersDeps> = {}): AdminUsersDeps {
   return {
     findUsers: jest.fn().mockResolvedValue([]),
     countUsers: jest.fn().mockResolvedValue(0),
+    findUser: jest.fn().mockResolvedValue(null),
+    createUser: jest.fn().mockImplementation(async (data) => mockUser(data)),
+    hashPassword: jest.fn().mockResolvedValue('hashed-password'),
+    getRoleByName: jest.fn().mockImplementation(async (name) => ({ name }) as IRole),
+    findGroupById: jest.fn().mockResolvedValue({ _id: new Types.ObjectId() } as IGroup),
+    addUserToGroup: jest.fn().mockResolvedValue({
+      user: mockUser(),
+      group: { _id: new Types.ObjectId() } as IGroup,
+    }),
+    minPasswordLength: 8,
     deleteUserById: jest
       .fn()
       .mockResolvedValue({ deletedCount: 1, message: 'User was deleted successfully.' }),
@@ -63,6 +74,119 @@ function createDeps(overrides: Partial<AdminUsersDeps> = {}): AdminUsersDeps {
 }
 
 describe('createAdminUsersHandlers', () => {
+  describe('createUser', () => {
+    const validBody = {
+      name: 'Test User',
+      username: 'testuser',
+      email: 'TEST@example.com',
+      password: 'secure-password',
+      confirmPassword: 'secure-password',
+      role: 'operation',
+      groupId: new Types.ObjectId().toString(),
+    };
+
+    it('creates a verified local user and assigns the selected department', async () => {
+      const createUser = jest.fn().mockImplementation(async (data) => mockUser(data));
+      const addUserToGroup = jest.fn().mockResolvedValue({
+        user: mockUser(),
+        group: { _id: new Types.ObjectId() } as IGroup,
+      });
+      const deps = createDeps({ createUser, addUserToGroup });
+      const handlers = createAdminUsersHandlers(deps);
+      const { req, res, status, json } = createReqRes({ body: validBody });
+
+      await handlers.createUser(req, res);
+
+      expect(status).toHaveBeenCalledWith(201);
+      expect(createUser).toHaveBeenCalledWith(
+        expect.objectContaining({
+          email: 'test@example.com',
+          password: 'hashed-password',
+          provider: 'local',
+          emailVerified: true,
+          role: 'operation',
+        }),
+      );
+      const createdUserId = (await createUser.mock.results[0].value)._id.toString();
+      expect(addUserToGroup).toHaveBeenCalledWith(createdUserId, validBody.groupId);
+      expect(json.mock.calls[0][0]).not.toHaveProperty('password');
+      expect(json.mock.calls[0][0].user).not.toHaveProperty('password');
+    });
+
+    it('rejects invalid fields before hashing a password', async () => {
+      const deps = createDeps();
+      const handlers = createAdminUsersHandlers(deps);
+      const { req, res, status, json } = createReqRes({
+        body: { ...validBody, email: 'invalid', password: 'short', confirmPassword: 'different' },
+      });
+
+      await handlers.createUser(req, res);
+
+      expect(status).toHaveBeenCalledWith(400);
+      expect(json).toHaveBeenCalledWith(expect.objectContaining({ error_code: 'INVALID_INPUT' }));
+      expect(deps.hashPassword).not.toHaveBeenCalled();
+      expect(deps.createUser).not.toHaveBeenCalled();
+    });
+
+    it('rejects duplicate email addresses', async () => {
+      const deps = createDeps({ findUser: jest.fn().mockResolvedValue(mockUser()) });
+      const handlers = createAdminUsersHandlers(deps);
+      const { req, res, status, json } = createReqRes({ body: validBody });
+
+      await handlers.createUser(req, res);
+
+      expect(status).toHaveBeenCalledWith(409);
+      expect(json).toHaveBeenCalledWith(expect.objectContaining({ error_code: 'EMAIL_EXISTS' }));
+      expect(deps.createUser).not.toHaveBeenCalled();
+    });
+
+    it('does not allow creating a system administrator from the form', async () => {
+      const deps = createDeps();
+      const handlers = createAdminUsersHandlers(deps);
+      const { req, res, status, json } = createReqRes({
+        body: { ...validBody, role: SystemRoles.ADMIN },
+      });
+
+      await handlers.createUser(req, res);
+
+      expect(status).toHaveBeenCalledWith(403);
+      expect(json).toHaveBeenCalledWith(
+        expect.objectContaining({ error_code: 'ADMIN_ROLE_FORBIDDEN' }),
+      );
+      expect(deps.createUser).not.toHaveBeenCalled();
+    });
+
+    it('returns 404 when the selected role does not exist', async () => {
+      const deps = createDeps({ getRoleByName: jest.fn().mockResolvedValue(null) });
+      const handlers = createAdminUsersHandlers(deps);
+      const { req, res, status, json } = createReqRes({ body: validBody });
+
+      await handlers.createUser(req, res);
+
+      expect(status).toHaveBeenCalledWith(404);
+      expect(json).toHaveBeenCalledWith(expect.objectContaining({ error_code: 'ROLE_NOT_FOUND' }));
+      expect(deps.createUser).not.toHaveBeenCalled();
+    });
+
+    it('rolls back the user when department assignment fails', async () => {
+      const created = mockUser();
+      const deleteUserById = jest.fn().mockResolvedValue({ deletedCount: 1, message: '' });
+      const deps = createDeps({
+        createUser: jest.fn().mockResolvedValue(created),
+        addUserToGroup: jest.fn().mockRejectedValue(new Error('group update failed')),
+        deleteUserById,
+      });
+      const handlers = createAdminUsersHandlers(deps);
+      const { req, res, status, json } = createReqRes({ body: validBody });
+
+      await handlers.createUser(req, res);
+
+      expect(deleteUserById).toHaveBeenCalledWith(created._id.toString());
+      expect(status).toHaveBeenCalledWith(500);
+      expect(json).toHaveBeenCalledWith(expect.objectContaining({ error_code: 'CREATE_FAILED' }));
+    });
+  });
+
   describe('listUsers', () => {
     it('returns paginated users with total count', async () => {
       const users = [

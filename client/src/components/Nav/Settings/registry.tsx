@@ -16,6 +16,7 @@ import {
   DecibelSelector,
 } from '../SettingsTabs/Speech/STT';
 import DisplayUsernameMessages from '../SettingsTabs/Account/DisplayUsernameMessages';
+import AdminUsers from '../SettingsTabs/Account/AdminUsers';
 import ConversationModeSwitch from '../SettingsTabs/Speech/ConversationModeSwitch';
 import EnableTwoFactorItem from '../SettingsTabs/Account/TwoFactorAuthentication';
 import ImportConversations from '../SettingsTabs/Data/ImportConversations';
@@ -533,6 +534,15 @@ export const registry: SettingEntry[] = [
     labelKey: 'com_ui_settings_label_backup_codes',
     show: (ctx) => ctx.isLocalProvider && ctx.twoFactorEnabled,
     Component: BackupCodesItem,
+  },
+  {
+    id: 'adminUsers',
+    tab: ACCOUNT,
+    section: 'userManagement',
+    labelKey: 'com_ui_admin_users_title',
+    keywords: ['admin', 'user', 'account', 'role', 'department'],
+    show: (ctx) => ctx.isAdmin,
+    Component: AdminUsers,
   },
   {
     id: 'lingxingDataSource',

@@ -193,6 +193,55 @@ export type ListRolesResponse = {
   offset?: number;
 };
 
+export type AdminUserListItem = {
+  id: string;
+  name: string;
+  username: string;
+  email: string;
+  avatar: string;
+  role: string;
+  provider: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type AdminCreateUserRequest = {
+  name: string;
+  username?: string;
+  email: string;
+  password: string;
+  confirmPassword: string;
+  role: string;
+  groupId?: string;
+};
+
+export type AdminCreateUserResponse = {
+  user: AdminUserListItem;
+  groupId?: string;
+};
+
+export type ListAdminUsersResponse = {
+  users: AdminUserListItem[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
+export type AdminGroupListItem = {
+  _id: string;
+  name: string;
+  description?: string;
+  source: 'local' | 'entra';
+  memberIds?: string[];
+};
+
+export type ListAdminGroupsResponse = {
+  groups: AdminGroupListItem[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
 export interface MCPServerStatus {
   requiresOAuth: boolean;
   connectionState: 'disconnected' | 'connecting' | 'connected' | 'error';

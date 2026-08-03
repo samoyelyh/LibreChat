@@ -1152,6 +1152,20 @@ export function listRoles(): Promise<q.ListRolesResponse> {
   return request.get(`${endpoints.adminRoles()}?limit=200`);
 }
 
+export function listAdminUsers(): Promise<q.ListAdminUsersResponse> {
+  return request.get(`${endpoints.adminUsers()}?limit=25`);
+}
+
+export function listAdminGroups(): Promise<q.ListAdminGroupsResponse> {
+  return request.get(`${endpoints.adminGroups()}?source=local&limit=200`);
+}
+
+export function createAdminUser(
+  payload: q.AdminCreateUserRequest,
+): Promise<q.AdminCreateUserResponse> {
+  return request.post(endpoints.adminUsers(), payload);
+}
+
 export function getRole(roleName: string): Promise<r.TRole> {
   return request.get(endpoints.getRole(roleName));
 }
