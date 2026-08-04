@@ -9,7 +9,10 @@ const { SystemRoles } = require('librechat-data-provider');
 
 const baseUrl = 'http://127.0.0.1:3080';
 const skillNames = ['amazon-fba-capacity-expansion', 'amazon-listing-competitor-research'];
-const agentIds = ['woda-amazon-fba-capacity-expansion', 'woda-amazon-listing-competitor-research'];
+const agentIds = [
+  'agent_woda-amazon-fba-capacity-expansion',
+  'agent_woda-amazon-listing-competitor-research',
+];
 
 async function request(token, route, options = {}) {
   return fetch(`${baseUrl}${route}`, {

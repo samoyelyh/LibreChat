@@ -16,6 +16,7 @@ const {
   TOOL_GROUPS,
   toolId,
 } = require('/app/deploy/phase6-tool-catalog.js');
+const { migrateManagedAgent } = require('/app/deploy/agent-id-migration.js');
 
 const verifyOnly = process.argv.includes('--verify');
 const customRoles = ['admin', 'technical', 'operation', 'advertising', 'finance', 'viewer'];
@@ -145,6 +146,9 @@ async function upsertSkill(definition, admin) {
 
 async function upsertAgent(definition, skill, admin) {
   const { Agent } = models;
+  if (!definition.id.startsWith('agent_')) {
+    throw new Error(`Managed agent id must start with "agent_": ${definition.id}`);
+  }
   const desired = {
     name: definition.name,
     description: definition.description,
@@ -163,7 +167,11 @@ async function upsertAgent(definition, skill, admin) {
     category: managedCategory,
   };
 
-  let agent = await Agent.findOne({ id: definition.id }).lean();
+  let agent = await migrateManagedAgent({
+    models,
+    oldIds: definition.legacyIds,
+    newId: definition.id,
+  });
   if (!agent) {
     agent = await db.createAgent({ id: definition.id, ...desired });
   } else {
@@ -271,6 +279,9 @@ async function verify() {
   let totalTools = 0;
   let deferredTools = 0;
   for (const definition of AGENT_DEFINITIONS) {
+    if (!definition.id.startsWith('agent_')) {
+      throw new Error(`Managed agent id must start with "agent_": ${definition.id}`);
+    }
     const skill = await Skill.findOne({
       name: definition.skillName,
       author: admin._id,
@@ -297,6 +308,12 @@ async function verify() {
       agent.hide_sequential_outputs !== false
     ) {
       throw new Error(`Managed agent "${definition.id}" is invalid`);
+    }
+    if (definition.legacyIds?.length) {
+      const legacyAgent = await Agent.findOne({ id: { $in: definition.legacyIds } }).lean();
+      if (legacyAgent) {
+        throw new Error(`Legacy managed agent id still exists: ${legacyAgent.id}`);
+      }
     }
     totalTools += agent.tools?.length ?? 0;
     deferredTools += verifyToolBoundary(definition, agent);

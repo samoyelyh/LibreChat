@@ -87,10 +87,12 @@ services:
       - ./seed-phase4-rbac.js:/app/deploy/seed-phase4-rbac.js:ro
       - ./verify-phase4-actors.js:/app/deploy/verify-phase4-actors.js:ro
       - ./seed-phase5-private-skills.js:/app/deploy/seed-phase5-private-skills.js:ro
+      - ./agent-id-migration.js:/app/deploy/agent-id-migration.js:ro
       - ./phase6-tool-catalog.js:/app/deploy/phase6-tool-catalog.js:ro
       - ./seed-phase6-agents.js:/app/deploy/seed-phase6-agents.js:ro
       - ./verify-phase6-live-tools.js:/app/deploy/verify-phase6-live-tools.js:ro
       - ./verify-phase6-api.js:/app/deploy/verify-phase6-api.js:ro
+      - ./verify-agent-chat.js:/app/deploy/verify-agent-chat.js:ro
       - ./gateway-signing.js:/app/deploy/gateway-signing.js:ro
       - ./verify-phase8-security.js:/app/deploy/verify-phase8-security.js:ro
       - ./verify-phase5-api.js:/app/deploy/verify-phase5-api.js:ro

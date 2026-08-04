@@ -11,6 +11,7 @@ const {
   ResourceType,
   SystemRoles,
 } = require('librechat-data-provider');
+const { migrateManagedAgent } = require('/app/deploy/agent-id-migration.js');
 
 const verifyOnly = process.argv.includes('--verify');
 const customRoles = ['admin', 'technical', 'operation', 'advertising', 'finance', 'viewer'];
@@ -28,14 +29,16 @@ const definitions = [
   {
     promptName: '亚马逊 FBA 容量管理器扩容申请测算专家',
     skillName: 'amazon-fba-capacity-expansion',
-    agentId: 'woda-amazon-fba-capacity-expansion',
+    agentId: 'agent_woda-amazon-fba-capacity-expansion',
+    legacyAgentIds: ['woda-amazon-fba-capacity-expansion'],
     description: '分析 FBA 容量、库存、销量和扩容申请材料，输出可执行的测算与申请建议。',
     starter: '请根据我提供的库存、销量和容量数据，帮我测算 FBA 扩容申请。',
   },
   {
     promptName: '亚马逊Listing竞品调研、图片分析与文案生成专家',
     skillName: 'amazon-listing-competitor-research',
-    agentId: 'woda-amazon-listing-competitor-research',
+    agentId: 'agent_woda-amazon-listing-competitor-research',
+    legacyAgentIds: ['woda-amazon-listing-competitor-research'],
     description: '完成亚马逊 Listing 竞品调研、图片分析与合规文案生成。',
     starter: '请根据我提供的 ASIN、站点和产品资料，开始 Listing 竞品调研。',
   },
@@ -157,6 +160,9 @@ async function upsertSkill(definition, admin) {
 
 async function upsertAgent(definition, skill, admin) {
   const { Agent } = models;
+  if (!definition.agentId.startsWith('agent_')) {
+    throw new Error(`Managed agent id must start with "agent_": ${definition.agentId}`);
+  }
   const desired = {
     name: definition.promptName,
     description: definition.description,
@@ -173,7 +179,11 @@ async function upsertAgent(definition, skill, admin) {
     conversation_starters: [definition.starter],
     category: managedCategory,
   };
-  let agent = await Agent.findOne({ id: definition.agentId }).lean();
+  let agent = await migrateManagedAgent({
+    models,
+    oldIds: definition.legacyAgentIds,
+    newId: definition.agentId,
+  });
   if (!agent) {
     agent = await db.createAgent({ id: definition.agentId, ...desired });
   } else {
@@ -234,6 +244,9 @@ async function seed() {
   );
 
   for (const definition of definitions) {
+    if (!definition.agentId.startsWith('agent_')) {
+      throw new Error(`Managed agent id must start with "agent_": ${definition.agentId}`);
+    }
     const skill = await upsertSkill(definition, admin);
     await upsertAgent(definition, skill, admin);
   }
@@ -315,6 +328,10 @@ async function verify() {
       agent.skills[0] !== skill._id.toString()
     ) {
       throw new Error(`Managed agent "${definition.agentId}" is invalid`);
+    }
+    const legacyAgent = await Agent.findOne({ id: { $in: definition.legacyAgentIds } }).lean();
+    if (legacyAgent) {
+      throw new Error(`Legacy managed agent id still exists: ${legacyAgent.id}`);
     }
     await verifyResourceAcl(
       ResourceType.SKILL,

@@ -122,7 +122,8 @@ const sellerSpriteTools = Object.freeze(rawToolsForGroups(SELLERSPRITE_GROUPS));
 
 const AGENT_DEFINITIONS = Object.freeze([
   Object.freeze({
-    id: 'woda-lingxing-business-analysis',
+    id: 'agent_woda-lingxing-business-analysis',
+    legacyIds: Object.freeze(['woda-lingxing-business-analysis']),
     name: '领星经营分析',
     skillName: 'lingxing-business-analysis',
     description: '使用当前用户自己的领星数据，分析店铺、Listing、库存、利润、广告和经营表现。',
@@ -161,7 +162,8 @@ const AGENT_DEFINITIONS = Object.freeze([
 `,
   }),
   Object.freeze({
-    id: 'woda-amazon-market-analysis',
+    id: 'agent_woda-amazon-market-analysis',
+    legacyIds: Object.freeze(['woda-amazon-market-analysis']),
     name: 'Amazon 市场分析',
     skillName: 'amazon-market-analysis',
     description: '使用公司统一卖家精灵数据，分析 ASIN、关键词、市场容量、趋势、集中度和评论。',
@@ -196,7 +198,8 @@ const AGENT_DEFINITIONS = Object.freeze([
 `,
   }),
   Object.freeze({
-    id: 'woda-cross-border-integrated-diagnosis',
+    id: 'agent_woda-cross-border-integrated-diagnosis',
+    legacyIds: Object.freeze(['woda-cross-border-integrated-diagnosis']),
     name: '跨境综合诊断',
     skillName: 'cross-border-integrated-diagnosis',
     description: '关联用户自己的领星经营数据与公司卖家精灵市场数据，完成内外部综合诊断。',
