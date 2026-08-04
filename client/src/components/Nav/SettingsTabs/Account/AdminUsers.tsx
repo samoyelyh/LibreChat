@@ -45,6 +45,7 @@ export default function AdminUsers() {
   const localize = useLocalize();
   const { showToast } = useToastContext();
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const [showValidation, setShowValidation] = useState(false);
   const startupQuery = useGetStartupConfig();
   const rolesQuery = useListRoles();
   const groupsQuery = useAdminGroupsQuery();
@@ -67,6 +68,7 @@ export default function AdminUsers() {
   const mutation = useCreateAdminUserMutation({
     onSuccess: (response) => {
       setForm(EMPTY_FORM);
+      setShowValidation(false);
       showToast({
         status: 'success',
         message: localize('com_ui_admin_users_success', { 0: response.user.email }),
@@ -83,10 +85,39 @@ export default function AdminUsers() {
     setForm((current) => ({ ...current, [field]: value }));
   };
 
+  const validationError = useMemo<TranslationKeys | null>(() => {
+    if (form.name.trim().length === 0) {
+      return 'com_auth_name_required';
+    }
+    if (form.name.trim().length < 3) {
+      return 'com_auth_name_min_length';
+    }
+    if (form.username.trim().length === 1) {
+      return 'com_auth_username_min_length';
+    }
+    if (form.email.trim().length === 0) {
+      return 'com_auth_email_required';
+    }
+    if (!/\S+@\S+\.\S+/.test(form.email)) {
+      return 'com_auth_email_pattern';
+    }
+    if (form.password.length < minPasswordLength) {
+      return 'com_auth_password_min_length';
+    }
+    if (form.password !== form.confirmPassword) {
+      return 'com_auth_password_not_match';
+    }
+    if (form.role.length === 0) {
+      return 'com_ui_admin_users_error_role';
+    }
+    return null;
+  }, [form, minPasswordLength]);
+
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (form.password !== form.confirmPassword) {
-      showToast({ status: 'error', message: localize('com_auth_password_not_match') });
+    setShowValidation(true);
+    if (validationError != null) {
+      showToast({ status: 'error', message: localize(validationError) });
       return;
     }
     mutation.mutate({
@@ -97,16 +128,6 @@ export default function AdminUsers() {
       groupId: form.groupId || undefined,
     });
   };
-
-  const loadingOptions = rolesQuery.isLoading || groupsQuery.isLoading;
-  const canSubmit =
-    !mutation.isLoading &&
-    !loadingOptions &&
-    form.name.trim().length >= 3 &&
-    /\S+@\S+\.\S+/.test(form.email) &&
-    form.password.length >= minPasswordLength &&
-    form.password === form.confirmPassword &&
-    form.role.length > 0;
 
   return (
     <div className="space-y-5">
@@ -120,6 +141,7 @@ export default function AdminUsers() {
       <form
         className="space-y-4"
         onSubmit={submit}
+        noValidate
         aria-label={localize('com_ui_admin_users_title')}
       >
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -226,8 +248,13 @@ export default function AdminUsers() {
         <p className="text-xs text-text-secondary">
           {localize('com_ui_admin_users_password_hint', { 0: minPasswordLength })}
         </p>
+        {showValidation && validationError != null && (
+          <p className="text-sm text-red-600 dark:text-red-400" role="alert">
+            {localize(validationError)}
+          </p>
+        )}
         <div className="flex justify-end">
-          <Button type="submit" variant="submit" disabled={!canSubmit}>
+          <Button type="submit" variant="submit" disabled={mutation.isLoading}>
             {mutation.isLoading ? <Spinner className="h-4 w-4" /> : localize('com_ui_create')}
           </Button>
         </div>

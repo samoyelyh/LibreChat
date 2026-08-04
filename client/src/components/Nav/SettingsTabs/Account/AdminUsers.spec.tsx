@@ -72,7 +72,7 @@ describe('AdminUsers', () => {
     fireEvent.change(screen.getByLabelText('com_ui_admin_users_department'), {
       target: { value: '507f1f77bcf86cd799439011' },
     });
-    fireEvent.submit(screen.getByRole('form', { name: 'com_ui_admin_users_title' }));
+    fireEvent.click(screen.getByRole('button', { name: 'com_ui_create' }));
 
     expect(mockMutate).toHaveBeenCalledWith({
       name: 'Test User',
@@ -83,5 +83,21 @@ describe('AdminUsers', () => {
       role: 'operation',
       groupId: '507f1f77bcf86cd799439011',
     });
+  });
+
+  it('explains why an incomplete form cannot be submitted', () => {
+    render(<AdminUsers />);
+
+    const createButton = screen.getByRole('button', { name: 'com_ui_create' });
+    expect(createButton).toBeEnabled();
+
+    fireEvent.click(createButton);
+
+    expect(mockMutate).not.toHaveBeenCalled();
+    expect(mockShowToast).toHaveBeenCalledWith({
+      status: 'error',
+      message: 'com_auth_name_required',
+    });
+    expect(screen.getByRole('alert')).toHaveTextContent('com_auth_name_required');
   });
 });
