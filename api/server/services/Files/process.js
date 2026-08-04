@@ -23,6 +23,7 @@ const {
   sanitizeFilename,
   parseText,
   processAudioFile,
+  extractAgentMessageDocument,
   getStorageMetadata,
   sweepExpiredFiles: sweepExpiredFilesWithDeps,
   startExpiredFileSweep: startExpiredFileSweepWithDeps,
@@ -681,6 +682,15 @@ const processAgentFileUpload = async ({ req, res, metadata }) => {
     throw new Error('No agent ID provided for agent file upload');
   }
 
+  const messageDocumentContext = await extractAgentMessageDocument({
+    file,
+    agentId: agent_id,
+    messageAttachment,
+    toolResource: tool_resource,
+    textOnlyProvider: 'woda-ai',
+    getAgent: db.getAgent,
+  });
+
   const isImage = file.mimetype.startsWith('image');
   let fileInfoMetadata;
   const entity_id = messageAttachment === true ? undefined : agent_id;
@@ -974,6 +984,8 @@ const processAgentFileUpload = async ({ req, res, metadata }) => {
       model: messageAttachment ? undefined : req.body.model,
       metadata: fileInfoMetadata,
       type: file.mimetype,
+      text: messageDocumentContext?.text,
+      textFormat: messageDocumentContext ? 'text' : undefined,
       embedded,
       source,
       height,

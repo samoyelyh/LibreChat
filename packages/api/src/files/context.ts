@@ -5,6 +5,16 @@ import type { ServerRequest } from '~/types';
 import { processTextWithTokenLimit } from '~/utils/text';
 import type { TokenCountFn } from '~/utils/text';
 
+/** Returns whether a file carries plain text extracted for model context. */
+export function hasExtractedFileContext(
+  file: Pick<IMongoFile, 'source' | 'text' | 'textFormat'>,
+): boolean {
+  if (!file.text) {
+    return false;
+  }
+  return file.source === FileSources.text || file.textFormat === 'text';
+}
+
 /**
  * Extracts text context from attachments and returns formatted text.
  * This handles text that was already extracted from files (OCR, transcriptions, document text, etc.)
@@ -38,10 +48,10 @@ export async function extractFileContext({
   let resultText = '';
 
   for (const file of attachments) {
-    const source = file.source ?? FileSources.local;
-    if (source === FileSources.text && file.text) {
+    const extractedText = file.text;
+    if (extractedText && hasExtractedFileContext(file)) {
       const { text: limitedText, wasTruncated } = await processTextWithTokenLimit({
-        text: file.text,
+        text: extractedText,
         tokenLimit: fileTokenLimit,
         tokenCountFn,
       });

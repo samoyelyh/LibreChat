@@ -41,6 +41,7 @@ jest.mock('@librechat/api', () => {
     sanitizeFilename: jest.fn((n) => n),
     parseText: jest.fn().mockResolvedValue({ text: '', bytes: 0 }),
     processAudioFile: jest.fn(),
+    extractAgentMessageDocument: jest.fn().mockResolvedValue(undefined),
     getStorageMetadata: jest.fn(() => ({})),
     getRetentionExpiry,
     getAgentFileRetentionExpiry: jest.fn(({ req, messageAttachment, toolResource }) => {
@@ -84,6 +85,7 @@ jest.mock('~/models', () => ({
   updateFileUsage: jest.fn(),
   deleteFiles: jest.fn(),
   findFileById: jest.fn(),
+  getAgent: jest.fn(),
   getConvo: jest.fn(),
   getExpiredFiles: jest.fn(),
   addAgentResourceFile: jest.fn().mockResolvedValue({}),
@@ -126,6 +128,7 @@ jest.mock('~/server/services/Files/Audio/STTService', () => ({
 }));
 
 const {
+  extractAgentMessageDocument,
   getRetentionExpiry,
   getAgentFileRetentionExpiry,
   sweepExpiredFiles: sweepExpiredFilesWithDeps,
@@ -212,12 +215,59 @@ describe('processAgentFileUpload', () => {
     mockRes.status.mockReturnThis();
     mockRes.json.mockReturnValue({});
     checkCapability.mockResolvedValue(true);
+    extractAgentMessageDocument.mockResolvedValue(undefined);
     getStrategyFunctions.mockReturnValue({
       handleFileUpload: jest
         .fn()
         .mockResolvedValue({ text: 'extracted text', bytes: 42, filepath: 'doc://result' }),
     });
     mergeFileConfig.mockReturnValue(makeFileConfig());
+  });
+
+  test('keeps the original message attachment and persists extracted document text', async () => {
+    const handleFileUpload = setupStoredFileUpload({
+      bytes: 128,
+      filename: 'market.xlsx',
+      filepath: '/uploads/user-123/market.xlsx',
+    });
+    extractAgentMessageDocument.mockResolvedValueOnce({
+      bytes: 30,
+      filename: 'market.xlsx',
+      filepath: FileSources.document_parser,
+      images: [],
+      text: 'Sheet One:\nkeyword,rank\nbackpack,1',
+    });
+    const req = makeReq({ mimetype: XLSX_MIME });
+    req.file.originalname = 'market.xlsx';
+
+    await processAgentFileUpload({
+      req,
+      res: mockRes,
+      metadata: {
+        agent_id: 'agent_woda-amazon-market-analysis',
+        file_id: 'file-uuid-123',
+        message_file: true,
+      },
+    });
+
+    expect(extractAgentMessageDocument).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentId: 'agent_woda-amazon-market-analysis',
+        messageAttachment: true,
+        textOnlyProvider: 'woda-ai',
+      }),
+    );
+    expect(handleFileUpload).toHaveBeenCalled();
+    expect(db.createFile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: FileSources.local,
+        filepath: '/uploads/user-123/market.xlsx',
+        text: 'Sheet One:\nkeyword,rank\nbackpack,1',
+        textFormat: 'text',
+        context: FileContext.message_attachment,
+      }),
+      true,
+    );
   });
 
   describe('OCR strategy selection', () => {

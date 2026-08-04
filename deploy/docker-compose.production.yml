@@ -93,6 +93,8 @@ services:
       - ./verify-phase6-live-tools.js:/app/deploy/verify-phase6-live-tools.js:ro
       - ./verify-phase6-api.js:/app/deploy/verify-phase6-api.js:ro
       - ./verify-agent-chat.js:/app/deploy/verify-agent-chat.js:ro
+      - ./verify-agent-attachments.js:/app/deploy/verify-agent-attachments.js:ro
+      - ./backfill-agent-document-context.js:/app/deploy/backfill-agent-document-context.js:ro
       - ./gateway-signing.js:/app/deploy/gateway-signing.js:ro
       - ./verify-phase8-security.js:/app/deploy/verify-phase8-security.js:ro
       - ./verify-phase5-api.js:/app/deploy/verify-phase5-api.js:ro

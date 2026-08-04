@@ -15,6 +15,8 @@ function categorizeFile(
   file: {
     type?: string | null;
     source?: string;
+    text?: string;
+    textFormat?: 'html' | 'text';
     embedded?: boolean;
     metadata?: { fileIdentifier?: string; codeEnvRef?: unknown };
   },
@@ -23,7 +25,7 @@ function categorizeFile(
   endpointFileConfig: EndpointFileConfig | undefined,
 ): 'images' | 'documents' | 'videos' | 'audios' | 'skipped' {
   const source = file.source ?? FileSources.local;
-  if (source === FileSources.text) {
+  if (source === FileSources.text || (file.textFormat === 'text' && !!file.text)) {
     return 'skipped';
   }
   if (
@@ -147,6 +149,22 @@ describe('processAttachments — supportedMimeTypes routing logic', () => {
     const { merged, epConfig } = resolveConfig(['.*']);
     const result = categorizeFile(
       { type: 'text/csv', source: FileSources.text },
+      false,
+      merged,
+      epConfig,
+    );
+    expect(result).toBe('skipped');
+  });
+
+  it('should skip native document encoding when extracted text is stored with the original file', () => {
+    const { merged, epConfig } = resolveConfig(['.*']);
+    const result = categorizeFile(
+      {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        source: FileSources.local,
+        text: 'Sheet One:\nvalue',
+        textFormat: 'text',
+      },
       false,
       merged,
       epConfig,

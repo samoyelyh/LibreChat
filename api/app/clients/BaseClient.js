@@ -8,6 +8,7 @@ const {
   buildMessageFiles,
   sanitizeFileForTransmit,
   extractFileContext,
+  hasExtractedFileContext,
   getReferencedQuotes,
   encodeAndFormatAudios,
   encodeAndFormatVideos,
@@ -1356,7 +1357,7 @@ class BaseClient {
     for (const file of attachments) {
       /** @type {FileSources} */
       const source = file.source ?? FileSources.local;
-      if (source === FileSources.text) {
+      if (source === FileSources.text || hasExtractedFileContext(file)) {
         allFiles.push(file);
         continue;
       }

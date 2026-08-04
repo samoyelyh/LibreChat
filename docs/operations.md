@@ -108,3 +108,7 @@ Phase 1 仅用于可信局域网 HTTP，`SESSION_COOKIE_SECURE=false`。取得�
 ```
 
 `seed-phase6-agents.sh` 幂等维护“领星经营分析”“Amazon 市场分析”“跨境综合诊断”三套共享 Agent、服务端执行型 Skill、精确工具 allowlist、Deferred Tools 和 Owner/Viewer ACL。写工具保持后端禁用；`verify-phase6.sh` 会直接验证网关拒绝领星写调用。
+
+NewAPI 的 `gpt-5.6-sol` 经真实 Chat Completions/Responses 探测能够直接读取 Excel，但 LibreChat MyAgent 的原生文件转换链路无法稳定把附件交给全部已配置模型。`woda-ai` Agent 因此统一在上传时使用 LibreChat 内置文档解析器提取 PDF、Word、Excel 和 OpenDocument 的纯文本，同时保留原始文件用于历史记录和下载；模型请求不再包含上游不兼容的 `file` 内容块。
+
+历史消息附件若在本兼容修复部署前上传，可在确认文件名和所属用户后执行一次幂等补录：`TARGET_FILENAME='<文件名>' TARGET_USER_ID='<用户 ID>' docker compose ... exec -T api node /app/deploy/backfill-agent-document-context.js`。脚本只给唯一匹配的本地文档补充解析文本，不替换或删除原文件；没有唯一匹配时拒绝执行。

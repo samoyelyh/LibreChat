@@ -38,6 +38,18 @@ docker run --rm --entrypoint grep "$image_id" \
   printf 'Phase 9 administrator user-creation API is missing from the built image.\n' >&2
   exit 1
 }
+docker run --rm --entrypoint grep "$image_id" \
+  -q 'extractAgentMessageDocument' \
+  /app/packages/api/dist/index.cjs || {
+  printf 'Agent document compatibility routing is missing from the built API package.\n' >&2
+  exit 1
+}
+docker run --rm --entrypoint grep "$image_id" \
+  -q 'extractAgentMessageDocument' \
+  /app/api/server/services/Files/process.js || {
+  printf 'Agent message-document extraction is missing from the built API.\n' >&2
+  exit 1
+}
 docker run --rm --entrypoint sh "$image_id" -c \
   "grep -R -q 'Create user account' /app/client/dist" || {
   printf 'Phase 9 administrator user-creation interface is missing from the built image.\n' >&2
