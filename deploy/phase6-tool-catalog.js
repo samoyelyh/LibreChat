@@ -164,6 +164,7 @@ const AGENT_DEFINITIONS = Object.freeze([
   Object.freeze({
     id: 'agent_woda-amazon-market-analysis',
     legacyIds: Object.freeze(['woda-amazon-market-analysis']),
+    model: 'gpt-5.6-sol',
     name: 'Amazon 市场分析',
     skillName: 'amazon-market-analysis',
     description: '使用公司统一卖家精灵数据，分析 ASIN、关键词、市场容量、趋势、集中度和评论。',

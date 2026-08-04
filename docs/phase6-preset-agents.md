@@ -10,7 +10,7 @@ Phase 6 在 Phase 3/4 的两类 MCP 网关和 Phase 5 的服务端执行型 Skil
 | Amazon 市场分析 | 公司统一卖家精灵凭证 | 40 | 5 | 35 |
 | 跨境综合诊断 | 领星 + 卖家精灵 | 63 | 5 | 58 |
 
-三套 Agent 固定使用 `woda-ai` Endpoint 和 `kimi-k2`，只允许直接工具调用，不启用代码间接调用。每套 Agent 的详细业务规则存放在独立的 `executionOnly` Skill 中；共享用户能使用 Agent，但不能读取 Skill 正文或附件。
+三套 Agent 固定使用 `woda-ai` Endpoint；“Amazon 市场分析”使用 `gpt-5.6-sol`，其余两套使用 `kimi-k2`。所有 Agent 只允许直接工具调用，不启用代码间接调用。每套 Agent 的详细业务规则存放在独立的 `executionOnly` Skill 中；共享用户能使用 Agent，但不能读取 Skill 正文或附件。
 
 ## 工具组
 
