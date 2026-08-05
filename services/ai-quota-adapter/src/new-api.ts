@@ -32,6 +32,31 @@ interface Page<T> {
   total?: number;
 }
 
+interface LoginUser {
+  id?: number;
+  require_2fa?: boolean;
+}
+
+interface LoginData extends LoginUser {
+  access_token?: string;
+  user?: LoginUser;
+}
+
+export function loginIdentity(data?: LoginData): {
+  userId: number | undefined;
+  accessToken: string | undefined;
+  requireTwoFactor: boolean;
+} {
+  return {
+    userId: data?.id ?? data?.user?.id,
+    accessToken:
+      typeof data?.access_token === 'string' && data.access_token.length > 0
+        ? data.access_token
+        : undefined,
+    requireTwoFactor: data?.require_2fa === true || data?.user?.require_2fa === true,
+  };
+}
+
 function fullRuntimeToken(value: string): string {
   return value.startsWith('sk-') ? value : `sk-${value}`;
 }
@@ -142,26 +167,33 @@ export class NewApiClient implements NewApiClientContract, NewApiProvisioningCli
     return data.items?.find((user) => user.username === username) ?? null;
   }
 
-  private async login(username: string, password: string): Promise<{ userId: number; cookie: string }> {
+  private async login(
+    username: string,
+    password: string,
+  ): Promise<{ userId: number; cookie: string; accessToken: string | undefined }> {
     const response = await this.rawRequest('/api/user/login', {
       method: 'POST',
       headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),
     });
-    const payload = (await response.json().catch(() => null)) as
-      | NewApiResponse<{ id?: number; require_2fa?: boolean }>
-      | null;
+    const payload = (await response.json().catch(() => null)) as NewApiResponse<LoginData> | null;
     const setCookie = response.headers.get('set-cookie') ?? '';
     const session = setCookie.match(/(?:^|,\s*)([^=;,]+=[^;]+)/)?.[1] ?? '';
-    const userId = payload?.data?.id;
-    if (!response.ok || payload?.success !== true || !userId || !session || payload.data?.require_2fa) {
+    const { userId, accessToken, requireTwoFactor } = loginIdentity(payload?.data);
+    if (
+      !response.ok ||
+      payload?.success !== true ||
+      !userId ||
+      (!session && !accessToken) ||
+      requireTwoFactor
+    ) {
       throw new AdapterError(
         502,
         'new_api_user_login_failed',
         'New API managed user login failed',
       );
     }
-    return { userId, cookie: session };
+    return { userId, cookie: session, accessToken };
   }
 
   private async tokens(accessToken: string, userId: number): Promise<NewApiToken[]> {
@@ -262,8 +294,10 @@ export class NewApiClient implements NewApiClientContract, NewApiProvisioningCli
     await this.setUserQuota(user.id, input.quota);
     const login = await this.login(input.username, input.password);
     const managementToken = await this.managementRequest<string>('/api/user/token', {
-      cookie: login.cookie,
       userId: login.userId,
+      ...(login.accessToken
+        ? { accessToken: login.accessToken }
+        : { cookie: login.cookie }),
     });
     let tokens = await this.tokens(managementToken, user.id);
     let token = tokens.find((candidate) => candidate.name === input.tokenName);

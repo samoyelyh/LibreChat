@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizedUrl } from '../src/new-api.js';
+import { loginIdentity, normalizedUrl } from '../src/new-api.js';
 
 describe('New API URL normalization', () => {
   it('retains the configured v1 prefix for OpenAI-compatible routes', () => {
@@ -15,5 +15,28 @@ describe('New API URL normalization', () => {
     expect(normalizedUrl('https://api.aso8ty.com/v1', '/api/usage/token')).toBe(
       'https://api.aso8ty.com/api/usage/token',
     );
+  });
+});
+
+describe('New API login response compatibility', () => {
+  it('reads the legacy top-level user id', () => {
+    expect(loginIdentity({ id: 42, require_2fa: false })).toEqual({
+      userId: 42,
+      accessToken: undefined,
+      requireTwoFactor: false,
+    });
+  });
+
+  it('reads the nested user returned by current New API versions', () => {
+    expect(loginIdentity({ access_token: 'session-access-token', user: { id: 84 } })).toEqual({
+      userId: 84,
+      accessToken: 'session-access-token',
+      requireTwoFactor: false,
+    });
+  });
+
+  it('preserves two-factor authentication checks for either response shape', () => {
+    expect(loginIdentity({ require_2fa: true }).requireTwoFactor).toBe(true);
+    expect(loginIdentity({ user: { id: 84, require_2fa: true } }).requireTwoFactor).toBe(true);
   });
 });
