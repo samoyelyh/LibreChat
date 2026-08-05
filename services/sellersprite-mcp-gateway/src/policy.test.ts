@@ -22,10 +22,11 @@ function actor(
 }
 
 describe('SellerSprite permission policy', () => {
-  it('allows operations only when both role and department match', () => {
+  it('allows operations for the business role or platform user in the operations department', () => {
     expect(canUseTool(actor('operation', ['运营部']), 'market_research')).toBe(true);
     expect(canUseTool(actor('operation', []), 'market_research')).toBe(false);
-    expect(canUseTool(actor('USER', ['运营部']), 'market_research')).toBe(false);
+    expect(canUseTool(actor('USER', ['运营部']), 'market_research')).toBe(true);
+    expect(canUseTool(actor('USER', ['只读访客']), 'market_research')).toBe(false);
   });
 
   it('limits advertising to keyword and competitor tools', () => {
@@ -37,6 +38,14 @@ describe('SellerSprite permission policy', () => {
     expect(canUseTool(advertising, 'asin_detail')).toBe(false);
     expect(canUseTool(advertising, 'market_research')).toBe(false);
     expect(canUseTool(advertising, 'review')).toBe(false);
+  });
+
+  it('applies advertising limits to platform users in the advertising department', () => {
+    const advertising = actor('USER', ['广告组']);
+    expect(canUseTool(advertising, 'traffic_keyword')).toBe(true);
+    expect(canUseTool(advertising, 'competitor_lookup')).toBe(true);
+    expect(canUseTool(advertising, 'asin_detail')).toBe(false);
+    expect(canUseTool(advertising, 'market_research')).toBe(false);
   });
 
   it('fails closed for finance, visitors, technical, and new unknown tools', () => {

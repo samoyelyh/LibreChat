@@ -54,6 +54,7 @@ const config: AdapterConfig = {
   newApiBaseUrl: 'https://new-api.invalid/v1',
   newApiAdminUserId: 1,
   requestTimeoutMs: 5000,
+  bodyLimitBytes: 16 * 1024 * 1024,
   requestsPerMinute: 30,
   maxConcurrentRequests: 2,
   auditRetentionDays: 90,

@@ -70,10 +70,10 @@ export function authorizeIdentity(input: {
   ) {
     return { permissionGroups: allOperationGroups, exactTools: [], allTools: true };
   }
-  if (normalizedRole === 'operation' && departments.has('运营部')) {
+  if (['USER', 'operation'].includes(normalizedRole) && departments.has('运营部')) {
     return { permissionGroups: allOperationGroups, exactTools: [], allTools: false };
   }
-  if (normalizedRole === 'advertising' && departments.has('广告组')) {
+  if (['USER', 'advertising'].includes(normalizedRole) && departments.has('广告组')) {
     return {
       permissionGroups: ['sellersprite_keyword'],
       exactTools: advertisingExactTools,

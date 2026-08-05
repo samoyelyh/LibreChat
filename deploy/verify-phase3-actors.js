@@ -48,20 +48,33 @@ const initialize = {
 (async () => {
   try {
     await connect();
-    const { User } = models;
+    const { User, Group } = models;
     const admin = await User.findOne({ role: SystemRoles.ADMIN }).select('_id email role').lean();
-    const ordinary = await User.findOne({ role: SystemRoles.USER }).select('_id email role').lean();
-    if (!admin || !ordinary) throw new Error('Both ADMIN and ordinary USER accounts are required');
+    const operations = await Group.findOne({ name: '运营部', source: 'local' })
+      .select('memberIds')
+      .lean();
+    const users = await User.find({ role: SystemRoles.USER }).select('_id email role idOnTheSource').lean();
+    const operationMembers = new Set(operations?.memberIds ?? []);
+    const ordinary = users.find(
+      (user) =>
+        operationMembers.has(user._id.toString()) ||
+        (user.idOnTheSource && operationMembers.has(user.idOnTheSource)),
+    );
+    if (!admin || !ordinary) {
+      throw new Error('Both ADMIN and an operations-department USER account are required');
+    }
 
     const allowed = await signedRequest(admin, initialize);
     await allowed.arrayBuffer();
     if (!allowed.ok) throw new Error(`ADMIN initialize returned HTTP ${allowed.status}`);
 
-    const denied = await signedRequest(ordinary, initialize);
-    await denied.arrayBuffer();
-    if (denied.status !== 403) throw new Error(`USER initialize returned HTTP ${denied.status}`);
+    const ordinaryAllowed = await signedRequest(ordinary, initialize);
+    await ordinaryAllowed.arrayBuffer();
+    if (!ordinaryAllowed.ok) {
+      throw new Error(`Operations USER initialize returned HTTP ${ordinaryAllowed.status}`);
+    }
 
-    console.log('PHASE3_ACTOR_AUTH_OK admin=allowed ordinary_user=denied');
+    console.log('PHASE3_ACTOR_AUTH_OK admin=allowed operations_user=allowed');
     await mongoose.disconnect();
     process.exit(0);
   } catch (error) {

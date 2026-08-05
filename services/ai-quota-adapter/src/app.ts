@@ -79,11 +79,27 @@ export function buildApp(config: AdapterConfig, services: AppServices): FastifyI
               censor: '[REDACTED]',
             },
           },
-    bodyLimit: 2 * 1024 * 1024,
+    bodyLimit: config.bodyLimitBytes,
     requestIdHeader: 'x-request-id',
   });
 
   app.setErrorHandler((error, _request, reply) => {
+    const protocolError =
+      error instanceof Error
+        ? (error as Error & { code?: string; statusCode?: number })
+        : null;
+    if (
+      protocolError?.statusCode === 413 ||
+      protocolError?.code === 'FST_ERR_CTP_BODY_TOO_LARGE'
+    ) {
+      return reply.code(413).send({
+        error: {
+          type: 'invalid_request_error',
+          code: 'request_body_too_large',
+          message: 'Conversation context exceeds the configured request size limit',
+        },
+      });
+    }
     if (error instanceof UpstreamError && error.upstreamBody) {
       reply.code(error.statusCode);
       if (error.upstreamContentType) reply.header('content-type', error.upstreamContentType);

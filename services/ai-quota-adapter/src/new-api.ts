@@ -427,11 +427,27 @@ export class NewApiClient implements NewApiClientContract, NewApiProvisioningCli
     headers.delete('x-librechat-conversation-id');
     headers.delete('x-librechat-message-id');
     headers.set('authorization', bearer(token));
-    return fetch(normalizedUrl(this.baseUrl, path), {
-      ...init,
-      headers,
-      signal: AbortSignal.any([signal, AbortSignal.timeout(this.timeoutMs)]),
-    });
+    const timeout = new AbortController();
+    const timer = setTimeout(() => timeout.abort(), this.timeoutMs);
+    timer.unref();
+    try {
+      return await fetch(normalizedUrl(this.baseUrl, path), {
+        ...init,
+        headers,
+        signal: AbortSignal.any([signal, timeout.signal]),
+      });
+    } catch (error) {
+      if (timeout.signal.aborted && !signal.aborted) {
+        throw new AdapterError(
+          504,
+          'new_api_response_timeout',
+          'New API did not start responding before the timeout',
+        );
+      }
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
   }
 }
 

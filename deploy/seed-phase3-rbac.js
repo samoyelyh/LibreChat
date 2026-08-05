@@ -35,7 +35,7 @@ async function seed() {
   );
   await Role.updateOne(
     { name: SystemRoles.USER, tenantId: { $exists: false } },
-    { $set: { 'permissions.MCP_SERVERS': permissionsFor(false) } },
+    { $set: { 'permissions.MCP_SERVERS': permissionsFor(mcpEnabled) } },
   );
   for (const name of customRoles) {
     await Role.updateOne(
@@ -55,7 +55,7 @@ async function verify() {
     .lean();
   const expected = new Map([
     [SystemRoles.ADMIN, mcpEnabled],
-    [SystemRoles.USER, false],
+    [SystemRoles.USER, mcpEnabled],
     ...customRoles.map((name) => [name, allowedCustomRoles.has(name)]),
   ]);
   if (roles.length !== expected.size) {

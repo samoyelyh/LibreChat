@@ -41,7 +41,7 @@ else
 fi
 
 if compose exec -T api node /app/deploy/verify-phase3-actors.js; then
-  pass 'Authorized admin is accepted and an ordinary user is denied'
+  pass 'Authorized admin and operations user are accepted'
 else
   fail 'SellerSprite actor authorization failed'
 fi

@@ -32,6 +32,7 @@ const config: AdapterConfig = {
   newApiBaseUrl: 'https://new-api.invalid/v1',
   newApiAdminUserId: 1,
   requestTimeoutMs: 5000,
+  bodyLimitBytes: 16 * 1024 * 1024,
   requestsPerMinute: 30,
   maxConcurrentRequests: 2,
   auditRetentionDays: 90,
@@ -264,6 +265,24 @@ describe('AI quota adapter', () => {
     });
     expect(response.statusCode).toBe(403);
     expect(response.json().error.code).toBe('model_not_allowed');
+    expect(relaySpy).not.toHaveBeenCalled();
+  });
+
+  it('returns a specific 413 error when conversation context exceeds the body limit', async () => {
+    const smallApp = buildApp({ ...config, bodyLimitBytes: 1024 * 1024 }, services);
+    const payload = {
+      model: 'kimi-k2',
+      messages: [{ role: 'user', content: 'x'.repeat(1024 * 1024) }],
+    };
+    const response = await smallApp.inject({
+      method: 'POST',
+      url: '/v1/chat/completions',
+      headers: internalHeaders('/v1/chat/completions', 'POST', payload),
+      payload,
+    });
+    await smallApp.close();
+    expect(response.statusCode).toBe(413);
+    expect(response.json().error.code).toBe('request_body_too_large');
     expect(relaySpy).not.toHaveBeenCalled();
   });
 
