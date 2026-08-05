@@ -107,7 +107,7 @@ Phase 1 仅用于可信局域网 HTTP，`SESSION_COOKIE_SECURE=false`。取得�
 ./deploy/verify-phase6.sh
 ```
 
-`seed-phase6-agents.sh` 幂等维护“领星经营分析”“Amazon 市场分析”“跨境综合诊断”三套共享 Agent、服务端执行型 Skill、精确工具 allowlist、Deferred Tools 和 Owner/Viewer ACL。写工具保持后端禁用；`verify-phase6.sh` 会直接验证网关拒绝领星写调用。
+`seed-phase6-agents.sh` 幂等维护“领星经营分析”“Amazon 市场分析”“跨境综合诊断”三套共享 Agent、服务端执行型 Skill、精确工具 allowlist、Deferred Tools 和 Owner/Viewer ACL。Phase 5/6 的五套预置 Agent 统一使用 `gpt-5.6-sol`；写工具保持后端禁用，`verify-phase6.sh` 会直接验证网关拒绝领星写调用。
 
 NewAPI 的 `gpt-5.6-sol` 经真实 Chat Completions/Responses 探测能够直接读取 Excel，但 LibreChat MyAgent 的原生文件转换链路无法稳定把附件交给全部已配置模型。`woda-ai` Agent 因此统一在上传时使用 LibreChat 内置文档解析器提取 PDF、Word、Excel 和 OpenDocument 的纯文本，同时保留原始文件用于历史记录和下载；模型请求不再包含上游不兼容的 `file` 内容块。
 

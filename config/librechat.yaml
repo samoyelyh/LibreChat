@@ -115,7 +115,7 @@ endpoints:
         X-LibreChat-Message-ID: '{{LIBRECHAT_BODY_MESSAGEID}}'
       models:
         default:
-          - 'kimi-k2'
+          - 'gpt-5.6-sol'
         fetch: true
       titleConvo: false
       summarize: false

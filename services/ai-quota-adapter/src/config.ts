@@ -25,8 +25,8 @@ const envSchema = z.object({
     .max(300000)
     .default(30000),
   AI_DEFAULT_USER_QUOTA: z.coerce.number().int().min(0).default(0),
-  AI_DEFAULT_ALLOWED_MODELS: z.string().default('kimi-k2'),
-  AI_ADAPTER_TEST_MODEL: z.string().min(1).default('kimi-k2'),
+  AI_DEFAULT_ALLOWED_MODELS: z.string().default('gpt-5.6-sol'),
+  AI_ADAPTER_TEST_MODEL: z.string().min(1).default('gpt-5.6-sol'),
   RUN_BILLABLE_PHASE2_TESTS: z.enum(['true', 'false']).default('false'),
 });
 

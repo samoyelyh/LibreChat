@@ -8,6 +8,7 @@ const models = require('@librechat/data-schemas').createModels(mongoose);
 const { SystemRoles } = require('librechat-data-provider');
 
 const baseUrl = 'http://nginx';
+const expectedModel = 'gpt-5.6-sol';
 
 async function request(token, route, options = {}) {
   return fetch(`${baseUrl}${route}`, {
@@ -92,7 +93,7 @@ async function json(response, label) {
         priority: 1000,
         quota: 0,
         gatewayGroup: 'default',
-        allowedModels: ['kimi-k2'],
+        allowedModels: [expectedModel],
         enabled: true,
         reason,
       }),
@@ -108,14 +109,14 @@ async function json(response, label) {
       const applyBody = await json(applyResponse, 'Zero-quota policy apply');
       if (
         applyBody.data?.balance?.totalGranted !== 0 ||
-        applyBody.data?.mapping?.allowedModels?.join(',') !== 'kimi-k2'
+        applyBody.data?.mapping?.allowedModels?.join(',') !== expectedModel
       ) {
         throw new Error('Applied user policy is not zero-quota and model-restricted');
       }
     }
 
     console.log(
-      `PHASE5_QUOTA_API_OK user=${ordinary._id} quota=0 model=kimi-k2 adminDenied=true secretsRedacted=true`,
+      `PHASE5_QUOTA_API_OK user=${ordinary._id} quota=0 model=${expectedModel} adminDenied=true secretsRedacted=true`,
     );
     await mongoose.disconnect();
     process.exit(0);

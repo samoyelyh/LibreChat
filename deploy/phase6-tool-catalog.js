@@ -124,6 +124,7 @@ const AGENT_DEFINITIONS = Object.freeze([
   Object.freeze({
     id: 'agent_woda-lingxing-business-analysis',
     legacyIds: Object.freeze(['woda-lingxing-business-analysis']),
+    model: 'gpt-5.6-sol',
     name: '领星经营分析',
     skillName: 'lingxing-business-analysis',
     description: '使用当前用户自己的领星数据，分析店铺、Listing、库存、利润、广告和经营表现。',
@@ -201,6 +202,7 @@ const AGENT_DEFINITIONS = Object.freeze([
   Object.freeze({
     id: 'agent_woda-cross-border-integrated-diagnosis',
     legacyIds: Object.freeze(['woda-cross-border-integrated-diagnosis']),
+    model: 'gpt-5.6-sol',
     name: '跨境综合诊断',
     skillName: 'cross-border-integrated-diagnosis',
     description: '关联用户自己的领星经营数据与公司卖家精灵市场数据，完成内外部综合诊断。',

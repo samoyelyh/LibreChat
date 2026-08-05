@@ -38,7 +38,7 @@ ensure_value() {
 set_value AI_GATEWAY_ADMIN_TOKEN "$NEWAPI_ADMIN_ACCESS_TOKEN"
 set_value NEW_API_ADMIN_USER_ID "$NEWAPI_ADMIN_USER_ID"
 ensure_value AI_DEFAULT_USER_QUOTA 0
-ensure_value AI_DEFAULT_ALLOWED_MODELS kimi-k2
+ensure_value AI_DEFAULT_ALLOWED_MODELS gpt-5.6-sol
 chmod 0600 "$ENV_FILE"
 
 printf 'Phase 5 quota environment is ready; secret values were not printed.\n'

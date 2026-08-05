@@ -13,8 +13,8 @@
 
 | 共享 Agent                                    | 私有 Skill                           | 模型      |
 | --------------------------------------------- | ------------------------------------ | --------- |
-| 亚马逊 FBA 容量管理器扩容申请测算专家         | `amazon-fba-capacity-expansion`      | `kimi-k2` |
-| 亚马逊Listing竞品调研、图片分析与文案生成专家 | `amazon-listing-competitor-research` | `kimi-k2` |
+| 亚马逊 FBA 容量管理器扩容申请测算专家         | `amazon-fba-capacity-expansion`      | `gpt-5.6-sol` |
+| 亚马逊Listing竞品调研、图片分析与文案生成专家 | `amazon-listing-competitor-research` | `gpt-5.6-sol` |
 
 预置脚本从管理员拥有的 PromptGroup 的 `productionId` 读取当前正式 Prompt，复制到 `executionOnly: true` 的 Skill。脚本不把提示词正文、Token 或用户隐私写入 Git、标准输出或部署记录。原 PromptGroup 保留为管理员历史源，不自动删除。
 

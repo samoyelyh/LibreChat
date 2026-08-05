@@ -24,7 +24,7 @@ fi
 user_json=$(compose exec -T api node /app/deploy/list-phase2-user.js | tail -n 1)
 user_id=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<<"$user_json")
 user_email=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["email"])' <<<"$user_json")
-model=${AI_ADAPTER_TEST_MODEL:-kimi-k2}
+model=${AI_ADAPTER_TEST_MODEL:-gpt-5.6-sol}
 
 printf 'LibreChat 测试用户：%s\n' "$user_email"
 printf '允许模型：%s\n' "$model"
