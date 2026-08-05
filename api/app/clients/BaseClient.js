@@ -9,6 +9,7 @@ const {
   sanitizeFileForTransmit,
   extractFileContext,
   hasExtractedFileContext,
+  resolveFileContextTokenLimit,
   getReferencedQuotes,
   encodeAndFormatAudios,
   encodeAndFormatVideos,
@@ -1320,10 +1321,19 @@ class BaseClient {
    * @returns {Promise<void>}
    */
   async addFileContextToMessage(message, attachments) {
+    if (this.fileContextTokenLimit == null) {
+      const fileCount = attachments.filter(hasExtractedFileContext).length;
+      this.fileContextTokenLimit = resolveFileContextTokenLimit({
+        req: this.options?.req,
+        maxContextTokens: this.maxContextTokens,
+        fileCount,
+      });
+    }
     const fileContext = await extractFileContext({
       attachments,
       req: this.options?.req,
       tokenCountFn: (text) => countTokens(text),
+      fileTokenLimit: this.fileContextTokenLimit,
     });
 
     if (fileContext) {
@@ -1437,10 +1447,16 @@ class BaseClient {
     }
 
     const contextSeen = new Set();
-    const attachmentsProcessed =
-      this.options.attachments && !(this.options.attachments instanceof Promise);
-    if (attachmentsProcessed) {
-      for (const attachment of this.options.attachments) {
+    let currentAttachments = [];
+    if (this.options.attachments) {
+      const resolvedAttachments = await this.options.attachments;
+      if (Array.isArray(resolvedAttachments)) {
+        currentAttachments = resolvedAttachments;
+        this.options.attachments = resolvedAttachments;
+      }
+    }
+    if (currentAttachments.length > 0) {
+      for (const attachment of currentAttachments) {
         if (attachment?.file_id) {
           contextSeen.add(attachment.file_id);
         }
@@ -1457,6 +1473,34 @@ class BaseClient {
           authorizedFilesById.set(file.file_id, file);
         }
       }
+    }
+
+    const extractedContextFileIds = new Set();
+    for (const file of currentAttachments) {
+      if (file?.file_id && hasExtractedFileContext(file)) {
+        extractedContextFileIds.add(file.file_id);
+      }
+    }
+    for (const message of _messages) {
+      for (const fileRef of message.files ?? []) {
+        const file = authorizedFilesById.get(fileRef?.file_id);
+        if (file?.file_id && hasExtractedFileContext(file)) {
+          extractedContextFileIds.add(file.file_id);
+        }
+      }
+    }
+    this.fileContextTokenLimit = resolveFileContextTokenLimit({
+      req: this.options.req,
+      maxContextTokens: this.maxContextTokens,
+      fileCount: extractedContextFileIds.size,
+    });
+    if (extractedContextFileIds.size > 1 && this.fileContextTokenLimit != null) {
+      logger.info('[BaseClient] Shared file context token budget applied', {
+        conversationId: this.conversationId,
+        fileCount: extractedContextFileIds.size,
+        perFileTokenLimit: this.fileContextTokenLimit,
+        maxContextTokens: this.maxContextTokens,
+      });
     }
 
     /**

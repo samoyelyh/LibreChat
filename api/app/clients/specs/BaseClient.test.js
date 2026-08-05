@@ -1476,6 +1476,29 @@ describe('BaseClient', () => {
       expect(JSON.stringify(secondMessage)).not.toContain('second-forged');
     });
 
+    test('shares one bounded token budget across historical extracted files', async () => {
+      const extractedFiles = Array.from({ length: 5 }, (_, index) => ({
+        ...ownerFile,
+        _id: `mongo-file-${index}`,
+        file_id: `context-file-${index}`,
+        filename: `context-${index}.xlsx`,
+        textFormat: 'text',
+        metadata: undefined,
+      }));
+      getFiles.mockResolvedValueOnce(extractedFiles);
+      TestClient.maxContextTokens = 380_000;
+
+      await TestClient.addPreviousAttachments(
+        extractedFiles.map((file, index) => ({
+          messageId: `context-message-${index}`,
+          files: [{ file_id: file.file_id }],
+        })),
+      );
+
+      expect(TestClient.fileContextTokenLimit).toBe(24_000);
+      expect(TestClient.addFileContextToMessage).toHaveBeenCalledTimes(5);
+    });
+
     test('preserves download-only historical attachments without trusting file fields', async () => {
       const [message] = await TestClient.addPreviousAttachments([
         {

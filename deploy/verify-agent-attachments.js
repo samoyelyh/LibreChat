@@ -17,6 +17,8 @@ const agentIds = (process.env.TEST_AGENT_IDS ??
   .map((agentId) => agentId.trim())
   .filter(Boolean);
 const testUserId = process.env.TEST_USER_ID;
+const attachmentCount = Math.max(1, Number.parseInt(process.env.TEST_ATTACHMENT_COUNT ?? '1', 10));
+const verifyFollowUp = process.env.TEST_FOLLOW_UP === 'true';
 
 function browserHeaders(token, headers = {}) {
   return {
@@ -81,19 +83,20 @@ async function uploadAttachment({ token, agentId, workbook }) {
   return stored;
 }
 
-async function waitForReply(conversationId) {
+async function waitForReply(conversationId, expectedReplyCount) {
   const deadline = Date.now() + 120_000;
   let reply;
   while (Date.now() < deadline) {
-    reply = await models.Message.findOne({ conversationId, isCreatedByUser: false })
-      .sort({ createdAt: -1 })
+    const replies = await models.Message.find({ conversationId, isCreatedByUser: false })
+      .sort({ createdAt: 1 })
       .lean();
+    reply = replies[replies.length - 1];
     const output = JSON.stringify({ text: reply?.text, content: reply?.content });
     if (reply?.error) {
       throw new Error(`Agent response failed: ${output.slice(0, 300)}`);
     }
-    if (output.includes(marker)) {
-      return;
+    if (replies.length >= expectedReplyCount && output.includes(marker)) {
+      return reply;
     }
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
@@ -102,31 +105,22 @@ async function waitForReply(conversationId) {
   );
 }
 
-async function verifyAgent({ token, agentId, workbook, cleanup }) {
-  const stored = await uploadAttachment({ token, agentId, workbook });
-  cleanup.files.push(stored);
-
+async function startChat({ token, agentId, conversationId, parentMessageId, files, text }) {
   const messageId = crypto.randomUUID();
   const response = await fetch(`${baseUrl}/api/agents/chat/agents`, {
     method: 'POST',
     headers: browserHeaders(token, { 'Content-Type': 'application/json' }),
     body: JSON.stringify({
-      text: '读取附件中 Expected response 列的值，只回复该值，不要调用任何工具。',
+      text,
       sender: 'User',
       isCreatedByUser: true,
-      parentMessageId: '00000000-0000-0000-0000-000000000000',
+      parentMessageId,
       messageId,
       responseMessageId: `${messageId}_`,
-      conversationId: null,
+      conversationId,
       endpoint: 'agents',
       agent_id: agentId,
-      files: [
-        {
-          file_id: stored.file_id,
-          filepath: stored.filepath,
-          type: stored.type,
-        },
-      ],
+      files,
       isRegenerate: false,
       isContinued: false,
     }),
@@ -136,13 +130,51 @@ async function verifyAgent({ token, agentId, workbook, cleanup }) {
     throw new Error(`chat for ${agentId} returned HTTP ${response.status}: ${body.slice(0, 300)}`);
   }
   const start = JSON.parse(body);
-  const conversationId = start.streamId ?? start.conversationId;
-  if (!conversationId) {
+  const resolvedConversationId = start.streamId ?? start.conversationId;
+  if (!resolvedConversationId) {
     throw new Error(`chat for ${agentId} returned no stream id`);
   }
+  return resolvedConversationId;
+}
+
+async function verifyAgent({ token, agentId, workbook, cleanup }) {
+  const storedFiles = [];
+  for (let index = 0; index < attachmentCount; index++) {
+    storedFiles.push(await uploadAttachment({ token, agentId, workbook }));
+  }
+  cleanup.files.push(...storedFiles);
+
+  const files = storedFiles.map((stored) => ({
+    file_id: stored.file_id,
+    filepath: stored.filepath,
+    type: stored.type,
+  }));
+  const conversationId = await startChat({
+    token,
+    agentId,
+    conversationId: null,
+    parentMessageId: '00000000-0000-0000-0000-000000000000',
+    files,
+    text: '读取附件中 Expected response 列的值，只回复该值，不要调用任何工具。',
+  });
   cleanup.conversationIds.push(conversationId);
-  await waitForReply(conversationId);
-  console.log(`AGENT_ATTACHMENT_OK agent=${agentId} source=local textFormat=text`);
+  const firstReply = await waitForReply(conversationId, 1);
+
+  if (verifyFollowUp) {
+    await startChat({
+      token,
+      agentId,
+      conversationId,
+      parentMessageId: firstReply.messageId,
+      files: undefined,
+      text: '根据本对话前面上传的附件，再次只回复 Expected response 的值。',
+    });
+    await waitForReply(conversationId, 2);
+  }
+
+  console.log(
+    `AGENT_ATTACHMENT_OK agent=${agentId} files=${attachmentCount} followUp=${verifyFollowUp} source=local textFormat=text`,
+  );
 }
 
 async function cleanupArtifacts(cleanup) {

@@ -45,6 +45,19 @@ interface:
 memory:
   disabled: true
 
+summarization:
+  trigger:
+    type: token_ratio
+    value: 0.75
+  reserveRatio: 0.15
+  maxSummaryTokens: 2000
+  contextPruning:
+    enabled: true
+    keepLastAssistants: 3
+    softTrimRatio: 0.3
+    hardClearRatio: 0.5
+    minPrunableToolChars: 50000
+
 registration:
   socialLogins: []
 

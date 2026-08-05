@@ -5,6 +5,10 @@ import type { ServerRequest } from '~/types';
 import { processTextWithTokenLimit } from '~/utils/text';
 import type { TokenCountFn } from '~/utils/text';
 
+const FILE_CONTEXT_BUDGET_RATIO = 0.4;
+const MAX_TOTAL_FILE_CONTEXT_TOKENS = 120_000;
+const MIN_FILE_CONTEXT_TOKENS = 1_000;
+
 /** Returns whether a file carries plain text extracted for model context. */
 export function hasExtractedFileContext(
   file: Pick<IMongoFile, 'source' | 'text' | 'textFormat'>,
@@ -13,6 +17,36 @@ export function hasExtractedFileContext(
     return false;
   }
   return file.source === FileSources.text || file.textFormat === 'text';
+}
+
+/** Shares a bounded portion of the model context across all extracted files in a run. */
+export function resolveFileContextTokenLimit({
+  req,
+  maxContextTokens,
+  fileCount,
+}: {
+  req?: ServerRequest;
+  maxContextTokens?: number | null;
+  fileCount: number;
+}): number | undefined {
+  if (!Number.isFinite(fileCount) || fileCount <= 0) {
+    return undefined;
+  }
+
+  const fileConfig = mergeFileConfig(req?.config?.fileConfig);
+  const configuredLimit = Number(req?.body?.fileTokenLimit ?? fileConfig.fileTokenLimit);
+  if (!Number.isFinite(configuredLimit) || configuredLimit <= 0) {
+    return undefined;
+  }
+
+  const contextBudget =
+    maxContextTokens != null && Number.isFinite(maxContextTokens) && maxContextTokens > 0
+      ? Math.floor(maxContextTokens * FILE_CONTEXT_BUDGET_RATIO)
+      : MAX_TOTAL_FILE_CONTEXT_TOKENS;
+  const totalBudget = Math.min(MAX_TOTAL_FILE_CONTEXT_TOKENS, contextBudget);
+  const sharedLimit = Math.floor(totalBudget / fileCount);
+
+  return Math.min(configuredLimit, Math.max(MIN_FILE_CONTEXT_TOKENS, sharedLimit));
 }
 
 /**
@@ -28,17 +62,20 @@ export async function extractFileContext({
   attachments,
   req,
   tokenCountFn,
+  fileTokenLimit: tokenLimitOverride,
 }: {
   attachments: IMongoFile[];
   req?: ServerRequest;
   tokenCountFn: TokenCountFn;
+  fileTokenLimit?: number;
 }): Promise<string | undefined> {
   if (!attachments || attachments.length === 0) {
     return undefined;
   }
 
   const fileConfig = mergeFileConfig(req?.config?.fileConfig);
-  const fileTokenLimit = req?.body?.fileTokenLimit ?? fileConfig.fileTokenLimit;
+  const fileTokenLimit =
+    tokenLimitOverride ?? req?.body?.fileTokenLimit ?? fileConfig.fileTokenLimit;
 
   if (!fileTokenLimit) {
     // If no token limit, return undefined (no processing)

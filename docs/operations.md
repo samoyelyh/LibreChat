@@ -111,4 +111,6 @@ Phase 1 仅用于可信局域网 HTTP，`SESSION_COOKIE_SECURE=false`。取得�
 
 NewAPI 的 `gpt-5.6-sol` 经真实 Chat Completions/Responses 探测能够直接读取 Excel，但 LibreChat MyAgent 的原生文件转换链路无法稳定把附件交给全部已配置模型。`woda-ai` Agent 因此统一在上传时使用 LibreChat 内置文档解析器提取 PDF、Word、Excel 和 OpenDocument 的纯文本，同时保留原始文件用于历史记录和下载；模型请求不再包含上游不兼容的 `file` 内容块。
 
+同一对话中的解析附件共享模型上下文预算：最多占当前 Agent 上下文的 40%，且总计不超过 120,000 tokens，再按附件数量均分；单个附件仍受会话配置的更小上限约束。这样可保留多份附件的可用内容，同时避免长对话把每份大型 Excel 都按 100,000 tokens 重复注入。自动摘要预留 15% 上下文空间，并在长会话中压缩较旧的大型工具结果。
+
 历史消息附件若在本兼容修复部署前上传，可在确认文件名和所属用户后执行一次幂等补录：`TARGET_FILENAME='<文件名>' TARGET_USER_ID='<用户 ID>' docker compose ... exec -T api node /app/deploy/backfill-agent-document-context.js`。脚本只给唯一匹配的本地文档补充解析文本，不替换或删除原文件；没有唯一匹配时拒绝执行。

@@ -45,6 +45,12 @@ docker run --rm --entrypoint grep "$image_id" \
   exit 1
 }
 docker run --rm --entrypoint grep "$image_id" \
+  -q 'resolveFileContextTokenLimit' \
+  /app/packages/api/dist/index.cjs || {
+  printf 'Shared file-context token budgeting is missing from the built API package.\n' >&2
+  exit 1
+}
+docker run --rm --entrypoint grep "$image_id" \
   -q 'extractAgentMessageDocument' \
   /app/api/server/services/Files/process.js || {
   printf 'Agent message-document extraction is missing from the built API.\n' >&2
