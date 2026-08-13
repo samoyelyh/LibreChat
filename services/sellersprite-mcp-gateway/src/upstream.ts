@@ -19,6 +19,7 @@ const forwardedResponseHeaders = [
 export function requestHeaders(
   incoming: Record<string, string | string[] | undefined>,
   secret: string,
+  auth: GatewayConfig['upstreamAuth'] = 'secret-key',
 ): Headers {
   const headers = new Headers();
   for (const name of forwardedRequestHeaders) {
@@ -26,7 +27,8 @@ export function requestHeaders(
     if (typeof value === 'string') headers.set(name, value);
     else if (Array.isArray(value) && value[0]) headers.set(name, value[0]);
   }
-  headers.set('secret-key', secret);
+  if (auth === 'bearer') headers.set('authorization', `Bearer ${secret}`);
+  else headers.set('secret-key', secret);
   return headers;
 }
 
@@ -52,7 +54,7 @@ export class SellerSpriteClient {
     const signal = input.signal ? AbortSignal.any([input.signal, timeout]) : timeout;
     return fetch(this.config.upstreamUrl, {
       method: input.method,
-      headers: requestHeaders(input.headers, this.config.upstreamSecret),
+      headers: requestHeaders(input.headers, this.config.upstreamSecret, this.config.upstreamAuth),
       ...(input.body != null ? { body: input.body } : {}),
       signal,
     });

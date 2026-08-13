@@ -1,6 +1,18 @@
-import type { PermissionGroup, VerifiedActor } from './types.js';
+import type { GatewayProfile, PermissionGroup, VerifiedActor } from './types.js';
+
+export const RESUME_READ_TOOLS = new Set([
+  'parse_resume',
+  'get_candidate',
+  'search_candidates',
+  'get_candidate_missing_fields',
+  'generate_followup',
+  'list_parsing_templates',
+]);
+
+export const RESUME_WRITE_TOOLS = new Set(['update_candidate_fields', 'record_candidate_reply']);
 
 export const TOOL_GROUPS: Record<PermissionGroup, ReadonlySet<string>> = {
+  resume_read: RESUME_READ_TOOLS,
   sellersprite_asin: new Set([
     'competitor_lookup',
     'product_research',
@@ -50,18 +62,34 @@ export const TOOL_GROUPS: Record<PermissionGroup, ReadonlySet<string>> = {
 };
 
 const advertisingExactTools = ['competitor_lookup', 'asin_competitor'];
-const allOperationGroups = Object.keys(TOOL_GROUPS) as PermissionGroup[];
+const allOperationGroups = (Object.keys(TOOL_GROUPS) as PermissionGroup[]).filter(
+  (group) => group !== 'resume_read',
+);
 
 export function permissionGroupForTool(tool: string): PermissionGroup | undefined {
+  if (RESUME_READ_TOOLS.has(tool)) return 'resume_read';
   return allOperationGroups.find((group) => TOOL_GROUPS[group].has(tool));
 }
 
 export function authorizeIdentity(input: {
   role: string;
   departments: string[];
+  profile?: GatewayProfile;
 }): Pick<VerifiedActor, 'permissionGroups' | 'exactTools' | 'allTools'> {
   const normalizedRole = input.role.trim();
   const departments = new Set(input.departments);
+
+  if (input.profile === 'resume') {
+    const allowed =
+      normalizedRole === 'ADMIN' ||
+      normalizedRole === 'admin' ||
+      departments.has('管理层');
+    return {
+      permissionGroups: allowed ? ['resume_read'] : [],
+      exactTools: [],
+      allTools: false,
+    };
+  }
 
   if (
     normalizedRole === 'ADMIN' ||
@@ -88,6 +116,7 @@ export function canUseServer(actor: VerifiedActor): boolean {
 }
 
 export function canUseTool(actor: VerifiedActor, tool: string): boolean {
+  if (RESUME_WRITE_TOOLS.has(tool)) return false;
   if (actor.allTools) return true;
   if (actor.exactTools.includes(tool)) return true;
   const group = permissionGroupForTool(tool);

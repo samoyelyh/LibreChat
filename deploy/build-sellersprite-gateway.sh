@@ -19,5 +19,10 @@ if grep -q '^SELLERSPRITE_MCP_GATEWAY_IMAGE=' "$ENV_FILE"; then
 else
   printf 'SELLERSPRITE_MCP_GATEWAY_IMAGE=%s\n' "$image_id" >> "$ENV_FILE"
 fi
+if grep -q '^RESUME_MCP_GATEWAY_IMAGE=' "$ENV_FILE"; then
+  sed -i "s|^RESUME_MCP_GATEWAY_IMAGE=.*|RESUME_MCP_GATEWAY_IMAGE=${image_id}|" "$ENV_FILE"
+else
+  printf 'RESUME_MCP_GATEWAY_IMAGE=%s\n' "$image_id" >> "$ENV_FILE"
+fi
 chmod 0600 "$ENV_FILE"
 printf 'SellerSprite Phase 8 security gateway image built and pinned by local image ID.\n'

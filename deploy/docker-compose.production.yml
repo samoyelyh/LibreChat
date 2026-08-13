@@ -23,6 +23,8 @@ services:
         condition: service_healthy
       sellersprite-mcp-gateway:
         condition: service_healthy
+      resume-mcp-gateway:
+        condition: service_healthy
       lingxing-mcp-gateway:
         condition: service_healthy
     ports:
@@ -73,8 +75,8 @@ services:
       CUSTOM_FOOTER: ${CUSTOM_FOOTER:-}
       MEILI_HOST: http://meilisearch:7700
       RAG_API_URL: http://rag-api:${RAG_PORT:-8000}
-      NO_PROXY: localhost,127.0.0.1,::1,mongodb,meilisearch,vectordb,rag-api,redis,ai-quota-adapter,sellersprite-mcp-gateway,lingxing-mcp-gateway,admin-panel,nginx
-      no_proxy: localhost,127.0.0.1,::1,mongodb,meilisearch,vectordb,rag-api,redis,ai-quota-adapter,sellersprite-mcp-gateway,lingxing-mcp-gateway,admin-panel,nginx
+      NO_PROXY: localhost,127.0.0.1,::1,mongodb,meilisearch,vectordb,rag-api,redis,ai-quota-adapter,sellersprite-mcp-gateway,resume-mcp-gateway,lingxing-mcp-gateway,admin-panel,nginx
+      no_proxy: localhost,127.0.0.1,::1,mongodb,meilisearch,vectordb,rag-api,redis,ai-quota-adapter,sellersprite-mcp-gateway,resume-mcp-gateway,lingxing-mcp-gateway,admin-panel,nginx
     volumes:
       - ../config/librechat.yaml:/app/librechat.yaml:ro
       - ./seed-phase1-rbac.js:/app/deploy/seed-phase1-rbac.js:ro
@@ -99,6 +101,8 @@ services:
       - ./verify-phase8-security.js:/app/deploy/verify-phase8-security.js:ro
       - ./verify-phase5-api.js:/app/deploy/verify-phase5-api.js:ro
       - ./verify-phase5-quota-api.js:/app/deploy/verify-phase5-quota-api.js:ro
+      - ./seed-resume-agent.js:/app/deploy/seed-resume-agent.js:ro
+      - ./verify-resume-mcp.js:/app/deploy/verify-resume-mcp.js:ro
       - images:/app/client/public/images
       - uploads:/app/uploads
       - api_logs:/app/api/logs
@@ -293,6 +297,52 @@ services:
     logging: *default-logging
     <<: *default-security
 
+  resume-mcp-gateway:
+    image: ${RESUME_MCP_GATEWAY_IMAGE:?Run deploy/build-sellersprite-gateway.sh first}
+    restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      SELLERSPRITE_MCP_PROFILE: resume
+      SELLERSPRITE_MCP_GATEWAY_HOST: 0.0.0.0
+      SELLERSPRITE_MCP_GATEWAY_PORT: ${RESUME_MCP_GATEWAY_PORT:-4400}
+      SELLERSPRITE_MCP_INTERNAL_KEY: ${RESUME_MCP_INTERNAL_KEY}
+      SELLERSPRITE_MCP_URL: ${RESUME_MCP_URL:-http://192.168.0.27:10099/mcp}
+      SELLERSPRITE_MCP_SECRET_KEY: ${RESUME_MCP_BEARER_TOKEN}
+      SELLERSPRITE_MCP_MONGO_URI: mongodb://${RESUME_MCP_DB_USERNAME}:${RESUME_MCP_DB_PASSWORD}@mongodb:27017/${RESUME_MCP_DB:-resume_mcp_gateway}?authSource=${RESUME_MCP_DB:-resume_mcp_gateway}
+      SELLERSPRITE_MCP_LIBRECHAT_DB: LibreChat
+      SELLERSPRITE_MCP_DB: ${RESUME_MCP_DB:-resume_mcp_gateway}
+      SELLERSPRITE_MCP_TIMEOUT_MS: ${RESUME_MCP_TIMEOUT_MS:-120000}
+      SELLERSPRITE_MCP_AUDIT_RETENTION_DAYS: ${RESUME_MCP_AUDIT_RETENTION_DAYS:-365}
+      SELLERSPRITE_MCP_MONTHLY_LIMIT: 0
+      SELLERSPRITE_MCP_SIGNATURE_TOLERANCE_MS: ${RESUME_MCP_SIGNATURE_TOLERANCE_MS:-30000}
+      SELLERSPRITE_MCP_REQUESTS_PER_MINUTE: ${RESUME_MCP_REQUESTS_PER_MINUTE:-30}
+      NO_PROXY: localhost,127.0.0.1,::1,mongodb,192.168.0.27
+      no_proxy: localhost,127.0.0.1,::1,mongodb,192.168.0.27
+    networks:
+      - backend
+      - mcp
+      - resume_egress
+    cap_drop:
+      - ALL
+    pids_limit: 256
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - node -e "fetch('http://127.0.0.1:${RESUME_MCP_GATEWAY_PORT:-4400}/readyz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    logging: *default-logging
+    <<: *default-security
+
   lingxing-mcp-gateway:
     image: ${LINGXING_MCP_GATEWAY_IMAGE:?Run deploy/build-lingxing-gateway.sh first}
     restart: unless-stopped
@@ -426,6 +476,7 @@ networks:
   lingxing_control:
     internal: true
   sellersprite_egress:
+  resume_egress:
   lingxing_egress:
 
 volumes:

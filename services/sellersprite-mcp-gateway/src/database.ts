@@ -183,7 +183,7 @@ export class MongoStores {
     return {
       ...headers,
       departments,
-      ...authorizeIdentity({ role: user.role, departments }),
+      ...authorizeIdentity({ role: user.role, departments, profile: this.config.profile }),
     };
   }
 

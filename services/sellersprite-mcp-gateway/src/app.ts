@@ -44,8 +44,10 @@ export function buildApp(
       level: process.env.LOG_LEVEL || 'info',
       redact: {
         paths: [
+          'req.headers.authorization',
           'req.headers.secret-key',
           'req.headers.x-mcp-gateway-key',
+          'headers.authorization',
           'headers.secret-key',
           'headers.x-mcp-gateway-key',
           'req.headers.x-woda-signature',
@@ -109,7 +111,14 @@ export function buildApp(
         if (!actor) {
           return reply.code(403).send({ error: { code: 'invalid_actor', message: 'Forbidden' } });
         }
-        await proxyMcp({ request, reply, actor, upstream, audits: stores });
+        await proxyMcp({
+          request,
+          reply,
+          actor,
+          profile: config.profile,
+          upstream,
+          audits: stores,
+        });
       };
       routes.all('/mcp', handler);
     },

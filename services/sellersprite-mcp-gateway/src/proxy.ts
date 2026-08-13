@@ -5,7 +5,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { canUseServer, canUseTool, filterToolsResult, permissionGroupForTool } from './policy.js';
 import { structureToolCallBody } from './structured-result.js';
 import { responseHeaders, type SellerSpriteClient } from './upstream.js';
-import type { CallAudit, RateLimitDecision, VerifiedActor } from './types.js';
+import type { CallAudit, GatewayProfile, RateLimitDecision, VerifiedActor } from './types.js';
 
 interface JsonRpcRequest {
   jsonrpc?: string;
@@ -156,10 +156,13 @@ export async function proxyMcp(input: {
   request: FastifyRequest;
   reply: FastifyReply;
   actor: VerifiedActor;
+  profile: GatewayProfile;
   upstream: SellerSpriteClient;
   audits: AuditRecorder;
 }): Promise<void> {
-  const { request, reply, actor, upstream, audits } = input;
+  const { request, reply, actor, profile, upstream, audits } = input;
+  const provider = profile === 'resume' ? 'Resume' : 'SellerSprite';
+  const errorPrefix = profile === 'resume' ? 'resume' : 'sellersprite';
   const method = request.method as 'GET' | 'POST' | 'DELETE';
   const calls = method === 'POST' ? toolCalls(request.body) : [];
   const requestId = randomUUID();
@@ -174,12 +177,14 @@ export async function proxyMcp(input: {
             success: false,
             status: 403,
             elapsedMs: Date.now() - started,
-            errorCode: 'sellersprite_not_authorized',
+            errorCode: `${errorPrefix}_not_authorized`,
           }),
         ),
       );
     }
-    reply.code(403).send({ error: { code: 'sellersprite_not_authorized', message: 'SellerSprite access is not authorized' } });
+    reply.code(403).send({
+      error: { code: `${errorPrefix}_not_authorized`, message: `${provider} access is not authorized` },
+    });
     return;
   }
 
@@ -200,7 +205,7 @@ export async function proxyMcp(input: {
     reply.code(403).send({
       jsonrpc: '2.0',
       id: denied[0]?.id ?? null,
-      error: { code: -32003, message: 'SellerSprite tool is not authorized' },
+      error: { code: -32003, message: `${provider} tool is not authorized` },
     });
     return;
   }
@@ -265,7 +270,7 @@ export async function proxyMcp(input: {
       const text = await upstreamResponse.text();
       const filteredBody = shouldFilterTools ? filterToolsBody(text, actor, contentType) : text;
       const body =
-        calls.length > 0
+        calls.length > 0 && profile === 'sellersprite'
           ? structureToolCallBody({
               text: filteredBody,
               contentType,
@@ -301,10 +306,10 @@ export async function proxyMcp(input: {
       if (!reply.sent) reply.code(499).send({ error: { code: errorCode, message: 'Request cancelled' } });
       return;
     }
-    errorCode = 'sellersprite_upstream_failed';
-    request.log.warn({ requestId, errorCode }, 'SellerSprite upstream request failed');
+    errorCode = `${errorPrefix}_upstream_failed`;
+    request.log.warn({ requestId, errorCode }, `${provider} upstream request failed`);
     if (!reply.sent) {
-      reply.code(502).send({ error: { code: errorCode, message: 'SellerSprite is currently unavailable' } });
+      reply.code(502).send({ error: { code: errorCode, message: `${provider} is currently unavailable` } });
     }
   } finally {
     request.raw.removeListener('aborted', abort);

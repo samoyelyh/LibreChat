@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  RESUME_READ_TOOLS,
+  RESUME_WRITE_TOOLS,
   TOOL_GROUPS,
   authorizeIdentity,
   canUseTool,
@@ -69,7 +71,7 @@ describe('SellerSprite permission policy', () => {
     expect(permissionGroupForTool('keyword_miner')).toBe('sellersprite_keyword');
     expect(permissionGroupForTool('market_price_distribution')).toBe('sellersprite_market');
     expect(permissionGroupForTool('review')).toBe('sellersprite_review');
-    expect(Object.keys(TOOL_GROUPS)).toHaveLength(4);
+    expect(Object.keys(TOOL_GROUPS)).toHaveLength(5);
   });
 
   it('filters tools/list so clients cannot enumerate denied tools', () => {
@@ -93,5 +95,28 @@ describe('SellerSprite permission policy', () => {
       'traffic_keyword',
       'competitor_lookup',
     ]);
+  });
+});
+
+describe('Resume permission policy', () => {
+  const resumeActor = (role: string, departments: string[]): VerifiedActor => ({
+    userId: '507f1f77bcf86cd799439011',
+    email: 'user@example.com',
+    role,
+    departments,
+    ...authorizeIdentity({ role, departments, profile: 'resume' }),
+  });
+
+  it('allows administrators and management to use only read tools', () => {
+    for (const value of [resumeActor('ADMIN', []), resumeActor('USER', ['管理层'])]) {
+      for (const tool of RESUME_READ_TOOLS) expect(canUseTool(value, tool)).toBe(true);
+      for (const tool of RESUME_WRITE_TOOLS) expect(canUseTool(value, tool)).toBe(false);
+    }
+  });
+
+  it('denies other departments and unknown tools', () => {
+    const operations = resumeActor('USER', ['运营部']);
+    expect(canUseTool(operations, 'parse_resume')).toBe(false);
+    expect(canUseTool(operations, 'future_resume_tool')).toBe(false);
   });
 });

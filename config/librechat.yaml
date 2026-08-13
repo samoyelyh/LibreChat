@@ -64,6 +64,7 @@ registration:
 mcpSettings:
   allowedAddresses:
     - 'sellersprite-mcp-gateway:4200'
+    - 'resume-mcp-gateway:4400'
     - 'lingxing-mcp-gateway:4300'
 
 mcpServers:
@@ -84,6 +85,23 @@ mcpServers:
       卖家精灵提供 Amazon 第三方市场研究和估算数据。
       回答时必须区分外部第三方数据、外部估算数据与公司内部实际经营数据；
       不得把估算销量描述为真实订单销量。
+  resume-mcp:
+    title: 'Resume MCP'
+    description: '内部候选人简历解析、查询、缺失字段检查和追问生成'
+    type: streamable-http
+    url: 'http://resume-mcp-gateway:4400/mcp'
+    headers:
+      X-MCP-Gateway-Key: '${RESUME_MCP_INTERNAL_KEY}'
+      X-LibreChat-User-ID: '{{LIBRECHAT_USER_ID}}'
+      X-LibreChat-User-Email: '{{LIBRECHAT_USER_EMAIL}}'
+      X-LibreChat-User-Role: '{{LIBRECHAT_USER_ROLE}}'
+    requiresOAuth: false
+    timeout: 120000
+    initTimeout: 30000
+    serverInstructions: |
+      本服务处理候选人简历与招聘资料，仅限系统管理员和管理层授权成员使用。
+      只能调用查询、解析、缺失字段检查、追问生成和模板查询工具。
+      更新候选人字段和记录候选人回复等写操作由网关永久拒绝。
   lingxing-mcp:
     title: 'Lingxing ERP'
     description: '公司内部店铺、Listing、库存、经营、财务、广告和监控数据'

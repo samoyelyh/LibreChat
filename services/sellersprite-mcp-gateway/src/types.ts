@@ -2,9 +2,13 @@ export type PermissionGroup =
   | 'sellersprite_asin'
   | 'sellersprite_keyword'
   | 'sellersprite_market'
-  | 'sellersprite_review';
+  | 'sellersprite_review'
+  | 'resume_read';
+
+export type GatewayProfile = 'sellersprite' | 'resume';
 
 export interface GatewayConfig {
+  profile: GatewayProfile;
   host: string;
   port: number;
   internalKey: string;
@@ -18,6 +22,7 @@ export interface GatewayConfig {
   monthlyLimit: number;
   signatureToleranceMs: number;
   requestsPerMinute: number;
+  upstreamAuth: 'secret-key' | 'bearer';
 }
 
 export interface ActorHeaders {
