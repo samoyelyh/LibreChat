@@ -18,6 +18,16 @@ const DEFAULT_MAX_TOTAL_BYTES = 100 * megabyte;
 const DEFAULT_MAX_ENTRY_BYTES = 25 * megabyte;
 
 /**
+ * Spreadsheet XML is substantially more verbose than the visible cell data.
+ * A normal 20k-row worksheet can exceed the generic Office per-entry cap even
+ * when the compressed workbook is only a few megabytes. These higher limits
+ * remain bounded and are used only for XLSX/ODS inputs before SheetJS parses
+ * them; DOCX and PPTX keep the stricter defaults above.
+ */
+export const SPREADSHEET_MAX_TOTAL_BYTES = 256 * megabyte;
+export const SPREADSHEET_MAX_ENTRY_BYTES = 128 * megabyte;
+
+/**
  * Tag-distinct error so callers (e.g. the office HTML producers and the
  * RAG document parser) can distinguish a refused zip-bomb from generic
  * parse failures and emit a sensible "file too large to preview" UI
@@ -161,5 +171,14 @@ export function assertSafeZipSize(buffer: Buffer, options: ZipSafetyOptions = {}
       zipfile.on('end', () => finish(null));
       zipfile.on('error', (zipErr: Error) => finish(zipErr));
     });
+  });
+}
+
+/** Validate a ZIP-backed spreadsheet with bounded worksheet-aware limits. */
+export function assertSafeSpreadsheetZip(buffer: Buffer, name = 'spreadsheet'): Promise<void> {
+  return assertSafeZipSize(buffer, {
+    name,
+    maxTotalBytes: SPREADSHEET_MAX_TOTAL_BYTES,
+    maxEntryBytes: SPREADSHEET_MAX_ENTRY_BYTES,
   });
 }

@@ -16,6 +16,7 @@ const {
   removeNullishValues,
   isAssistantsEndpoint,
   getEndpointFileConfig,
+  excelMimeTypes,
   documentParserMimeTypes,
 } = require('librechat-data-provider');
 const { logger, runAsSystem } = require('@librechat/data-schemas');
@@ -44,6 +45,31 @@ const { getStrategyFunctions } = require('./strategies');
 const { determineFileType } = require('~/server/utils');
 const { STTService } = require('./Audio/STTService');
 const db = require('~/models');
+
+const isSpreadsheetMime = (mimetype = '') => {
+  const normalized = mimetype.split(';', 1)[0].trim().toLowerCase();
+  return (
+    excelMimeTypes.test(normalized) ||
+    normalized === 'application/vnd.oasis.opendocument.spreadsheet'
+  );
+};
+
+const createSpreadsheetParseError = (file, error) => {
+  if (!isSpreadsheetMime(file?.mimetype)) {
+    return null;
+  }
+
+  const exceededLimit = error?.code === 'ZIP_BOMB';
+  const guidance = exceededLimit
+    ? 'Its decompressed worksheet data exceeds the safe processing limit.'
+    : 'The workbook may be corrupt, password-protected, or outside the safe processing limits.';
+  const wrapped = new Error(
+    `Unable to process spreadsheet "${file.originalname}". ${guidance} Remove unused formatted rows or columns, or split the workbook into smaller files.`,
+    { cause: error },
+  );
+  wrapped.code = exceededLimit ? 'SPREADSHEET_DECOMPRESSION_LIMIT' : 'SPREADSHEET_PARSE_FAILED';
+  return wrapped;
+};
 
 /**
  * Creates a modular file upload wrapper that ensures filename sanitization
@@ -682,14 +708,19 @@ const processAgentFileUpload = async ({ req, res, metadata }) => {
     throw new Error('No agent ID provided for agent file upload');
   }
 
-  const messageDocumentContext = await extractAgentMessageDocument({
-    file,
-    agentId: agent_id,
-    messageAttachment,
-    toolResource: tool_resource,
-    textOnlyProvider: 'woda-ai',
-    getAgent: db.getAgent,
-  });
+  let messageDocumentContext;
+  try {
+    messageDocumentContext = await extractAgentMessageDocument({
+      file,
+      agentId: agent_id,
+      messageAttachment,
+      toolResource: tool_resource,
+      textOnlyProvider: 'woda-ai',
+      getAgent: db.getAgent,
+    });
+  } catch (error) {
+    throw createSpreadsheetParseError(file, error) ?? error;
+  }
 
   const isImage = file.mimetype.startsWith('image');
   let fileInfoMetadata;
@@ -833,6 +864,10 @@ const processAgentFileUpload = async ({ req, res, metadata }) => {
           `[processAgentFileUpload] Document parser failed for "${file.originalname}":`,
           err,
         );
+        const spreadsheetError = createSpreadsheetParseError(file, err);
+        if (spreadsheetError) {
+          throw spreadsheetError;
+        }
       }
     };
 

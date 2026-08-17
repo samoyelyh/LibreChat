@@ -1,6 +1,12 @@
 import JSZip from 'jszip';
 import { megabyte } from 'librechat-data-provider';
-import { assertSafeZipSize, ZipBombError } from './zipSafety';
+import {
+  assertSafeSpreadsheetZip,
+  assertSafeZipSize,
+  SPREADSHEET_MAX_ENTRY_BYTES,
+  SPREADSHEET_MAX_TOTAL_BYTES,
+  ZipBombError,
+} from './zipSafety';
 
 /**
  * Build a ZIP archive whose entries inflate to exactly `decompressedBytes`
@@ -120,5 +126,21 @@ describe('assertSafeZipSize', () => {
     expect(buffer.length).toBeLessThan(1 * megabyte);
     /* And the validator catches it on default caps. */
     await expect(assertSafeZipSize(buffer)).rejects.toThrow(ZipBombError);
+  });
+});
+
+describe('assertSafeSpreadsheetZip', () => {
+  test('uses bounded limits sized for normal large worksheet XML', () => {
+    expect(SPREADSHEET_MAX_ENTRY_BYTES).toBe(128 * megabyte);
+    expect(SPREADSHEET_MAX_TOTAL_BYTES).toBe(256 * megabyte);
+  });
+
+  test('accepts a worksheet entry above the generic Office cap', async () => {
+    const buffer = await buildBombArchive([
+      { name: 'xl/worksheets/sheet1.xml', decompressedBytes: 26 * megabyte },
+    ]);
+
+    await expect(assertSafeZipSize(buffer)).rejects.toThrow(ZipBombError);
+    await expect(assertSafeSpreadsheetZip(buffer, 'large.xlsx')).resolves.toBeUndefined();
   });
 });

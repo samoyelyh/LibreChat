@@ -270,6 +270,26 @@ describe('processAgentFileUpload', () => {
     );
   });
 
+  test('surfaces a spreadsheet limit error for message attachments instead of suggesting OCR', async () => {
+    const parserError = new Error('worksheet exceeds cap');
+    parserError.code = 'ZIP_BOMB';
+    extractAgentMessageDocument.mockRejectedValueOnce(parserError);
+    const req = makeReq({ mimetype: XLSX_MIME });
+    req.file.originalname = 'large-market.xlsx';
+
+    await expect(
+      processAgentFileUpload({
+        req,
+        res: mockRes,
+        metadata: {
+          agent_id: 'agent_woda-amazon-market-analysis',
+          file_id: 'file-uuid-123',
+          message_file: true,
+        },
+      }),
+    ).rejects.toThrow(/decompressed worksheet data exceeds the safe processing limit/);
+  });
+
   describe('OCR strategy selection', () => {
     test.each([
       ['PDF', PDF_MIME],
@@ -399,6 +419,22 @@ describe('processAgentFileUpload', () => {
       ).rejects.toThrow(/image-based and requires an OCR service/);
 
       expect(parseText).not.toHaveBeenCalled();
+    });
+
+    test('reports spreadsheet decompression limits without the misleading OCR message', async () => {
+      const parserError = new Error('sheet1.xml exceeds cap');
+      parserError.code = 'ZIP_BOMB';
+      getStrategyFunctions.mockReturnValue({
+        handleFileUpload: jest.fn().mockRejectedValue(parserError),
+      });
+      const req = makeReq({ mimetype: XLSX_MIME, ocrConfig: null });
+      req.file.originalname = 'large-market.xlsx';
+
+      await expect(
+        processAgentFileUpload({ req, res: mockRes, metadata: makeMetadata() }),
+      ).rejects.toThrow(
+        /Unable to process spreadsheet "large-market\.xlsx".*safe processing limit/,
+      );
     });
 
     test('falls back to document_parser when configured OCR fails for a document MIME type', async () => {

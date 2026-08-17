@@ -78,7 +78,11 @@ async function uploadAttachment({ token, agentId, workbook }) {
     throw new Error(`upload for ${agentId} did not create a file record`);
   }
   if (stored.source !== 'local' || stored.textFormat !== 'text' || !stored.text?.includes(marker)) {
-    throw new Error(`upload for ${agentId} did not preserve and extract the workbook`);
+    throw new Error(
+      `upload for ${agentId} did not preserve and extract the workbook ` +
+        `(source=${stored.source ?? 'missing'}, textFormat=${stored.textFormat ?? 'missing'}, ` +
+        `textBytes=${Buffer.byteLength(stored.text ?? '', 'utf8')}, markerPresent=${stored.text?.includes(marker) === true})`,
+    );
   }
   return stored;
 }

@@ -3,7 +3,7 @@ import yauzl from 'yauzl';
 import { megabyte, excelMimeTypes, FileSources } from 'librechat-data-provider';
 import type { TextItem } from 'pdfjs-dist/types/src/display/api';
 import type { MistralOCRUploadResult } from '~/types';
-import { assertSafeZipSize } from './zipSafety';
+import { assertSafeSpreadsheetZip, assertSafeZipSize } from './zipSafety';
 
 type FileParseFn = (file: Express.Multer.File) => Promise<string>;
 
@@ -115,7 +115,7 @@ async function excelSheetToText(file: Express.Multer.File): Promise<string> {
    * `.xls` (BIFF/CFB) is not a ZIP — magic-byte check skips the
    * validator for it (yauzl would reject it as malformed anyway). */
   if (data.length >= 4 && data[0] === 0x50 && data[1] === 0x4b) {
-    await assertSafeZipSize(data, { name: file.originalname ?? 'spreadsheet' });
+    await assertSafeSpreadsheetZip(data, file.originalname ?? 'spreadsheet');
   }
   const workbook = read(data, { type: 'buffer' });
 

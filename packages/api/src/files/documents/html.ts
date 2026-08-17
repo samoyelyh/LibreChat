@@ -1,7 +1,7 @@
 import yauzl from 'yauzl';
 import { excelMimeTypes, megabyte } from 'librechat-data-provider';
 import { tryLibreOfficePreview } from './libreoffice';
-import { assertSafeZipSize } from './zipSafety';
+import { assertSafeSpreadsheetZip, assertSafeZipSize } from './zipSafety';
 
 /**
  * Maximum decompressed size we'll accept from a single PPTX entry. Mirrors the
@@ -756,7 +756,7 @@ function escapeHtml(input: string): string {
  * carries a pure-CSS tab strip for sheet switching.
  *
  * Pre-flights ZIP-backed formats (`.xlsx`/`.ods`) through
- * `assertSafeZipSize` to reject zip bombs before SheetJS reaches them.
+ * the spreadsheet-specific ZIP guard before SheetJS reaches them.
  * `.xls` is a binary CFB format, not a ZIP — it doesn't have the
  * decompression-amplification attack surface, so the safety check is
  * skipped for it (yauzl would reject it as malformed anyway).
@@ -767,7 +767,7 @@ export async function excelSheetToHtml(buffer: Buffer): Promise<string> {
    * start with `PK\x03\x04`. Skipping the validator on a non-ZIP input
    * also avoids confusing yauzl errors leaking out as ZipBombError. */
   if (buffer.length >= 4 && buffer[0] === 0x50 && buffer[1] === 0x4b) {
-    await assertSafeZipSize(buffer, { name: 'spreadsheet' });
+    await assertSafeSpreadsheetZip(buffer);
   }
   const XLSX = await import('xlsx');
   const workbook = XLSX.read(buffer, { type: 'buffer' });
