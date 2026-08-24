@@ -19,13 +19,24 @@ interface ToolCall {
   tool: string;
 }
 
+interface McpProtocolError {
+  jsonrpc: '2.0';
+  id: string | number | null;
+  error: {
+    code: number;
+    data: { code: string };
+    message: string;
+  };
+}
+
 export interface AuditRecorder {
   recordAudits(audits: CallAudit[]): Promise<void>;
   consumeToolRateLimit(userId: string, tool: string): Promise<RateLimitDecision>;
 }
 
 function jsonRpcRequests(body: unknown): JsonRpcRequest[] {
-  if (Array.isArray(body)) return body.filter((item): item is JsonRpcRequest => item != null && typeof item === 'object');
+  if (Array.isArray(body))
+    return body.filter((item): item is JsonRpcRequest => item != null && typeof item === 'object');
   if (body != null && typeof body === 'object') return [body as JsonRpcRequest];
   return [];
 }
@@ -52,6 +63,37 @@ function responseHasError(value: unknown, id: ToolCall['id']): boolean {
   });
 }
 
+function mcpMediaType(contentType: string | null): string | null {
+  const value = contentType?.split(';', 1)[0]?.trim().toLowerCase();
+  return value || null;
+}
+
+function isMcpResponseContentType(contentType: string | null, status: number): boolean {
+  const mediaType = mcpMediaType(contentType);
+  if (mediaType == null) return status === 202 || status === 204;
+  return (
+    mediaType === 'application/json' ||
+    mediaType.endsWith('+json') ||
+    mediaType === 'text/event-stream'
+  );
+}
+
+function invalidMcpResponse(input: {
+  calls: ToolCall[];
+  errorPrefix: 'resume' | 'sellersprite';
+  provider: 'Resume' | 'SellerSprite';
+}): McpProtocolError {
+  return {
+    jsonrpc: '2.0',
+    id: input.calls[0]?.id ?? null,
+    error: {
+      code: -32052,
+      data: { code: `${input.errorPrefix}_invalid_content_type` },
+      message: `${input.provider} returned an invalid MCP response`,
+    },
+  };
+}
+
 function nestedRecordCount(value: unknown): number | undefined {
   if (Array.isArray(value)) return value.length;
   if (value == null || typeof value !== 'object') {
@@ -73,7 +115,8 @@ function nestedRecordCount(value: unknown): number | undefined {
     }
   }
   for (const key of ['total', 'totalCount', 'count']) {
-    if (typeof object[key] === 'number' && Number.isFinite(object[key])) return object[key] as number;
+    if (typeof object[key] === 'number' && Number.isFinite(object[key]))
+      return object[key] as number;
   }
   if (Array.isArray(object.content)) {
     for (const content of object.content) {
@@ -183,7 +226,10 @@ export async function proxyMcp(input: {
       );
     }
     reply.code(403).send({
-      error: { code: `${errorPrefix}_not_authorized`, message: `${provider} access is not authorized` },
+      error: {
+        code: `${errorPrefix}_not_authorized`,
+        message: `${provider} access is not authorized`,
+      },
     });
     return;
   }
@@ -258,29 +304,50 @@ export async function proxyMcp(input: {
       signal: controller.signal,
     });
     status = upstreamResponse.status;
+    const contentType = upstreamResponse.headers.get('content-type');
+    if (!isMcpResponseContentType(contentType, status)) {
+      await upstreamResponse.arrayBuffer().catch(() => undefined);
+      errorCode = `${errorPrefix}_invalid_content_type`;
+      responseValue = invalidMcpResponse({ calls, errorPrefix, provider });
+      request.log.warn(
+        {
+          requestId,
+          errorCode,
+          upstreamStatus: status,
+          upstreamContentType: mcpMediaType(contentType) ?? 'missing',
+        },
+        `${provider} returned an invalid MCP content type`,
+      );
+      const clientStatus = status >= 400 && status <= 599 ? status : 502;
+      const retryAfter = upstreamResponse.headers.get('retry-after');
+      if (retryAfter) reply.header('retry-after', retryAfter);
+      reply.header('x-sellersprite-gateway-request-id', requestId);
+      reply.code(clientStatus).send(responseValue);
+      return;
+    }
     for (const [name, value] of Object.entries(responseHeaders(upstreamResponse))) {
       reply.header(name, value);
     }
     reply.header('x-sellersprite-gateway-request-id', requestId);
     reply.code(status);
 
-    const contentType = upstreamResponse.headers.get('content-type') ?? 'application/json';
+    const safeContentType = contentType ?? 'application/json';
     const shouldFilterTools = method === 'POST' && includesMethod(request.body, 'tools/list');
     if (shouldFilterTools || calls.length > 0 || upstreamResponse.body == null) {
       const text = await upstreamResponse.text();
-      const filteredBody = shouldFilterTools ? filterToolsBody(text, actor, contentType) : text;
+      const filteredBody = shouldFilterTools ? filterToolsBody(text, actor, safeContentType) : text;
       const body =
         calls.length > 0 && profile === 'sellersprite'
           ? structureToolCallBody({
               text: filteredBody,
-              contentType,
+              contentType: safeContentType,
               calls,
               provider: 'sellersprite',
               requestId,
               elapsedMs: Date.now() - started,
             })
           : filteredBody;
-      if (!contentType.includes('text/event-stream')) {
+      if (!safeContentType.includes('text/event-stream')) {
         try {
           responseValue = JSON.parse(body) as unknown;
           returnRecordCount = nestedRecordCount(responseValue);
@@ -303,13 +370,16 @@ export async function proxyMcp(input: {
     if (controller.signal.aborted) {
       status = 499;
       errorCode = 'client_closed_request';
-      if (!reply.sent) reply.code(499).send({ error: { code: errorCode, message: 'Request cancelled' } });
+      if (!reply.sent)
+        reply.code(499).send({ error: { code: errorCode, message: 'Request cancelled' } });
       return;
     }
     errorCode = `${errorPrefix}_upstream_failed`;
     request.log.warn({ requestId, errorCode }, `${provider} upstream request failed`);
     if (!reply.sent) {
-      reply.code(502).send({ error: { code: errorCode, message: `${provider} is currently unavailable` } });
+      reply
+        .code(502)
+        .send({ error: { code: errorCode, message: `${provider} is currently unavailable` } });
     }
   } finally {
     request.raw.removeListener('aborted', abort);
@@ -321,7 +391,11 @@ export async function proxyMcp(input: {
             auditFor(actor, call, {
               requestId,
               allowed: true,
-              success: status >= 200 && status < 300 && !responseHasError(responseValue, call.id),
+              success:
+                errorCode == null &&
+                status >= 200 &&
+                status < 300 &&
+                !responseHasError(responseValue, call.id),
               status,
               elapsedMs,
               ...(returnRecordCount != null ? { returnRecordCount } : {}),
@@ -338,4 +412,5 @@ export const testing = {
   toolCalls,
   nestedRecordCount,
   filterToolsBody,
+  isMcpResponseContentType,
 };
